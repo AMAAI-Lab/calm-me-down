@@ -21,7 +21,7 @@ Health Integration: Connects to Apple Health (Read-Only) to fetch Heart Rate and
 UI/UX: Dark-themed, fully scrollable interface with keyboard avoidance and safe area handling.
 
 
-## Get started
+## How to Run
 
 1. Install dependencies
 
@@ -29,20 +29,18 @@ UI/UX: Dark-themed, fully scrollable interface with keyboard avoidance and safe 
    npm install
    ```
 
-2. Start the app
+2. Generate native code (pre build) - for healthkit permissions
 
    ```bash
-   npx expo start
+   npx expo prebuild --platform ios --clean
    ```
 
-In the output, you'll find options to open the app in a
+3. Run on simulator
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+   ```bash
+   npx expo run:ios --device "iPhone 16e"
+   ```
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
 ## Get a fresh project
 
