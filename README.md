@@ -1,6 +1,25 @@
-# Welcome to your Expo app 👋
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+
+# Emotion-Based Playlist App - Current State Backup
+
+Date: January 22, 2026
+Platform: React Native (Expo)
+Target: iOS (Simulator/Device)
+
+1. App Status & Features
+
+The app is a functional single-screen application that:
+
+Captures User Context: Name, age, current mood, desired mood, music taste.
+
+Tracks Location: Automatically fetches GPS coordinates (Latitude/Longitude).
+
+Monitors Environment: Fetches real-time Weather (OpenWeatherMap) and News Headlines (NewsAPI) based on location.
+
+Health Integration: Connects to Apple Health (Read-Only) to fetch Heart Rate and Steps. (Fitbit/Garmin are mocked).
+
+UI/UX: Dark-themed, fully scrollable interface with keyboard avoidance and safe area handling.
+
 
 ## Get started
 
