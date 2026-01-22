@@ -46,7 +46,7 @@ UI/UX: Dark-themed, fully scrollable interface with keyboard avoidance and safe 
 
 1. Initialize: npx create-expo-app emotionApp
 
-2. Install Libraries: npx expo install react-native-health expo-location expo-dev-client react-native-safe-area-context expo-build-properties expo-constants
+2. Install Libraries: npx expo install react-native-health expo-location expo-dev-client react-native-safe-area-context expo-build-properties expo-constants expo-av
 
 3. Configure app.json: Add NSHealthShareUsageDescription, NSLocationWhenInUseUsageDescription, and entitlements.
 
