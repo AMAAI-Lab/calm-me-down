@@ -1,5 +1,3 @@
-
-
 # Emotion-Based Playlist App - Current State Backup
 
 Date: January 22, 2026
@@ -42,26 +40,23 @@ UI/UX: Dark-themed, fully scrollable interface with keyboard avoidance and safe 
    ```
 
 
-## Get a fresh project
+## Starting fresh (re installation guide)
 
-When you're ready, run:
 
-```bash
-npm run reset-project
-```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+1. Initialize: npx create-expo-app emotionApp
 
-## Learn more
+2. Install Libraries: npx expo install react-native-health expo-location expo-dev-client react-native-safe-area-context expo-build-properties expo-constants
 
-To learn more about developing your project with Expo, look at the following resources:
+3. Configure app.json: Add NSHealthShareUsageDescription, NSLocationWhenInUseUsageDescription, and entitlements.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+4. Restore Files: Copy App.tsx and services/ folder to the root.
 
-## Join the community
+5. Set API Keys: Add API keys to .env or App.tsx.
+## API KEYS
 
-Join our community of developers creating universal apps.
+- EXPO_PUBLIC_PPLX_API_KEY (Perplexity AI)
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- OPENWEATHER_API_KEY (OpenWeatherMap)
+
+- NEWS_API_KEY (NewsAPI)
