@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "emotionApp",
+    "slug": "emotionApp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.geeta.emotionapp",
+      "infoPlist": {
+        "NSHealthShareUsageDescription": "This app requires access to your health data to analyze your heart rate and steps.",
+        "NSHealthUpdateUsageDescription": "This app writes data to HealthKit.",
+        "NSLocationWhenInUseUsageDescription": "This app uses your location to personalize song lyrics based on where you are."
+      },
+      "entitlements": {
+        "com.apple.developer.healthkit": true
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "web": {
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "17.0"
+          }
+        }
+      ]
+    ]
+  }
+}
