@@ -1,12 +1,17 @@
 import { FontAwesome5 } from '@expo/vector-icons';
+import { useAudioPlayer } from 'expo-audio';
 import * as Location from 'expo-location';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Button, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { authorizeAppleHealth, fetchAppleHealthData, fetchFitbitData, fetchGarminData, HealthData } from './services/HealthService';
+import { GeneratedSong, generateSong } from './services/MusicGenerationService';
 import { fetchNewsData, fetchWeatherData, NewsData, WeatherData } from './services/WeatherNewsService';
 
+
 const PPLX_API_KEY = process.env.EXPO_PUBLIC_PPLX_API_KEY;
+
+const DEBUG_MODE = true;
 
 
 type UserInput = {
@@ -21,7 +26,7 @@ type UserInput = {
 type Provider = 'Apple Health' | 'Fitbit' | 'Garmin';
 
 export default function App() {
-    console.log("DEBUG ENV: ", process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY);
+  //console.log("DEBUG ENV: ", process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY);
   const [input, setInput] = useState<UserInput>({
     name: '', age: '', currentMood: '', desiredMood: '', favoriteGenre: '', favoriteBand: '',
   });
@@ -35,10 +40,17 @@ export default function App() {
   const [loading, setLoading] = useState(false);
 
   const [generatingLyrics, setGeneratingLyrics] = useState(false);
+
+  const [generatingSong, setGeneratingSong] = useState(false);
+
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [lyricPrompt, setLyricPrompt] = useState('');
 
   const [generatedLyrics, setGeneratedLyrics] = useState('');
+  const [song, setSong] = useState<GeneratedSong | null>(null);
+  //const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const player = useAudioPlayer(song?.audioUrl || '');
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const handleInputChange = (key: keyof UserInput, value: string) => setInput(prev => ({ ...prev, [key]: value }));
   const isFormComplete = useMemo(() => Object.values(input).every(val => val.trim() !== ''), [input]);
@@ -57,6 +69,7 @@ export default function App() {
       // Using US as default country code for news; can be enhanced to use location data
       const news = await fetchNewsData('us');
       setNewsData(news);
+      
     })();
   }, []);
 
@@ -91,7 +104,7 @@ export default function App() {
     }
   }, [isAuthorized, provider]);
 
-  const generateLyrics = async () => {
+  const generateLyricsAndSong = async () => {
     if (!isFormComplete || !healthData) {
       Alert.alert('Missing Data', 'Complete form and fetch data first.');
       return;
@@ -100,7 +113,7 @@ export default function App() {
 
     // Enhanced Prompt with Weather and News
     const prompt = `
-      Act as a professional songwriter. Create a personalized song lyric for a user.
+      Act as a creative songwriter. Create a personalized song lyric for a user.
       
       USER: ${input.name}, ${input.age}y/o. 
       MOOD JOURNEY: ${input.currentMood} -> ${input.desiredMood}.
@@ -115,14 +128,43 @@ export default function App() {
       - Weather: ${weatherData?.temperature ? `${weatherData.temperature}°C, ${weatherData.description}` : 'Unknown'}
       - Local Vibe (News Headline): "${newsData?.headline || 'N/A'}"
       
-      GOAL: Please write cohesive, therapeutic song (Verse1, Chorus, Verse 2, Outro) that reflect their physical state and environment (weather/location), subtly referencing the news mood if relevant, to help them transition to their desired mood.The song should be motivational and uplifting, helping them reach their desired emotional state through music. 
+      GOAL: Please write cohesive, therapeutic lyrics for a song (Verse1, Chorus, Verse 2, Outro) that reflect their physical state and environment (weather/location), subtly referencing the news mood if relevant, to help them transition to their desired mood.The song should be motivational and uplifting, helping them reach their desired emotional state through music. 
       Keep the lyrics concise, around 200 words, and ensure they flow well together. Avoid generic phrases and focus on creating a unique piece that resonates with their situation and location. Thank you!
+      Use the physical state and environment details to add depth and personalization to the lyrics, not just as literal references.
 
     `;
 
     setLyricPrompt(prompt);
     setGeneratingLyrics(true);
     setGeneratedLyrics('');
+    setSong(null);
+
+    // DEBUG MODE: Skip API calls
+    if (DEBUG_MODE) {
+        console.log("DEBUG MODE: Generating mock lyrics and song...");
+        
+        // Mock Latency
+        setTimeout(async () => {
+            // 1. Mock Lyrics
+            const mockLyrics = `(Mock Lyrics for ${input.name})\n\nIn the city of ${weatherData?.city || 'Dreams'},\nHeart beating at ${healthData.heartRate || 'steady'} pace,\nWalking through the ${weatherData?.description || 'mist'},\nFinding my own space.\n\nFrom ${input.currentMood} shadows,\nTo ${input.desiredMood} light,\nThis song guides me,\nThrough the day and night.`;
+            setGeneratedLyrics(mockLyrics);
+            setGeneratingLyrics(false);
+
+            // 2. Mock Song (Immediately after)
+            setGeneratingSong(true);
+            setTimeout(() => {
+                const mockSongData: GeneratedSong = {
+                    audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', // Public domain MP3
+                    title: `Song for ${input.name}`,
+                    duration: 30
+                };
+                setSong(mockSongData);
+                setGeneratingSong(false);
+            }, 1500); // 1.5s delay for song generation simulation
+        }, 1000); // 1s delay for lyrics simulation
+        
+        return;
+    }
 
     //Check for PPLX_API_KEY
     if (!PPLX_API_KEY) {
@@ -160,7 +202,79 @@ export default function App() {
     } finally {
         setGeneratingLyrics(false);
     }
-  };
+
+    // Generate Song Audio
+    setGeneratingSong(true);
+    console.log("Generating song with lyrics:", generatedLyrics);
+    try {
+        const generatedSong = await generateSong(generatedLyrics || 'Uplifting song', input.favoriteGenre, input.desiredMood);
+        if (generatedSong) {
+            setSong(generatedSong);
+        } else {
+            Alert.alert('Song Generation Failed', 'Could not generate song audio.');
+        }
+        setGeneratingSong(false);
+    } catch (error: any) {
+        Alert.alert('Error', error.message || 'An error occurred while generating song audio.');
+        setGeneratingSong(false);
+    }
+}
+
+    // Play generated song audio
+    // async function playSound() {
+    //     if (!song?.audioUrl) return;
+    //     console.log('Playing song from URL:', song.audioUrl);
+
+    //     try {
+    //         if (sound) {
+    //             console.log('Resuming Sound');
+    //             await sound.playAsync();
+    //             setIsPlaying(true);
+    //             return;
+    //         }
+
+    //         console.log('Loading Sound');
+    //         const { sound: newSound } = await Audio.Sound.createAsync(
+    //             { uri: song.audioUrl },
+    //             { shouldPlay: true }
+    //         );
+    //         setSound(newSound);
+    //         setIsPlaying(true);
+
+    //         newSound.setOnPlaybackStatusUpdate((status) => {
+    //             if (status.isLoaded && status.didJustFinish) {
+    //                 setIsPlaying(false);
+    //                 newSound.setPositionAsync(0);
+    //             }
+    //         });
+    //     }
+    //     catch (error) {
+    //         console.error('Error playing sound:', error);
+    //         Alert.alert('Playback Error', 'An error occurred while trying to play the song.');
+    //     }
+    // }
+
+    const playSound =  () => {
+        if (player.playing) {
+            player.pause();
+        } else {
+            player.play();  
+        }
+    };
+
+    const stopSound =  () => {
+        player.pause();
+        player.seekTo(0);
+    };
+
+    // React.useEffect(() => {
+    //     return sound
+    //       ? () => {
+    //           console.log('Unloading Sound');
+    //           sound.unloadAsync(); }
+    //       : undefined;
+    //   }, [sound]);
+  
 
   const renderHealthProviderSection = () => {
       const isApple = provider === 'Apple Health';
@@ -262,19 +376,48 @@ export default function App() {
           {isFormComplete && healthData && (
             <View style={styles.stepContainer}>
               <Button 
-                    title={generatingLyrics ? "Generating..." : "Generate Lyrics"} 
-                    onPress={generateLyrics} 
-                    disabled={generatingLyrics}
+                    title={generatingLyrics || generatingSong ? "Creating Magic..." : "Generate Lyrics & Song"} 
+                    onPress={generateLyricsAndSong} 
+                    disabled={generatingLyrics || generatingSong}
                     color="#007CC3" 
                 />
             </View>
           )}
 
-          {/* Display generated lyrics */}
+          {/* Display  lyrics and Audio Player */}
           {generatedLyrics.length > 0 && (
             <View style={styles.lyricsContainer}>
               <Text style={styles.lyricsTitle}>Your Song</Text>
               <Text style={styles.lyricsText}>{generatedLyrics}</Text>
+
+              <Text style={{ marginTop: 15, fontSize: 16, fontWeight: 'bold', color: '#fff', textAlign: 'center' }}>Generated Song Audio</Text>
+
+              {/* {song && (
+                <View style={styles.playerContainer}>
+                    <Text style = {styles.infoText} >{song.title}</Text>
+                    <Button title="Play Song" onPress={playSound} color="#4CAF50" />
+                </View>
+              )}
+              { generatingSong && <ActivityIndicator color="#4CAF50" style={{ marginTop: 10 }} />} */}
+
+              {song && (
+                        <View style={styles.playerContainer}>
+                            <Text style={[styles.infoText, {fontWeight: 'bold', marginBottom: 10}]}>🎵 {song.title}</Text>
+                            <View style={styles.controlsRow}>
+                                <Button 
+                                    title={player.playing ? "Pause" : "▶️ Play Song"} 
+                                    onPress={playSound} 
+                                    color="#E91E63" 
+                                />
+                                <View style={{width: 20}} /> 
+                                <Button 
+                                    title="⏹ Stop" 
+                                    onPress={stopSound} 
+                                    color="#FF6B6B" 
+                                />
+                            </View>
+                        </View>
+                    )}
             </View>
           ) }
 
@@ -309,4 +452,17 @@ const styles = StyleSheet.create({
   providerButton: { alignItems: 'center', padding: 10, borderRadius: 8, borderWidth: 2, borderColor: '#333', backgroundColor: '#121212', flex: 1, height: 80, justifyContent: 'center' },
   providerButtonSelected: { borderColor: '#4CAF50', backgroundColor: '#4CAF50' },
   providerButtonText: { fontSize: 12, color: '#fff', marginTop: 4, fontWeight: '600' },
+  playerContainer: { 
+    marginTop: 20,
+    alignItems: 'center',
+    padding: 15,
+    backgroundColor: '#333',
+    borderRadius: 10,
+ },
+ controlsRow: { 
+    flexDirection: 'row', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginTop: 10 
+  },
 });
