@@ -158,7 +158,8 @@ export default function App() {
                 const mockSongData: GeneratedSong = {
                     audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', // Public domain MP3
                     title: `Song for ${input.name}`,
-                    duration: 30
+                    duration: 30,
+                    provider: 'MOCK'
                 };
                 setSong(mockSongData);
                 setGeneratingSong(false);
@@ -261,16 +262,18 @@ export default function App() {
 
     const playSound =  () => {
         if (player.playing) {
-            console.log("playing, so ill pause");
+            //console.log("playing, so ill pause");
             player.pause();
         } else {
-            console.log("paused, so ill play");
+            //console.log("paused, so ill play");
             player.play();  
         }
+        //if song is finished, play from beginning TODO
+
     };
 
     const stopSound =  () => {
-        console.log("Im going to stop");
+        //console.log("Im going to stop");
         player.pause();
         player.seekTo(0);
     };
