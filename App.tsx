@@ -261,13 +261,16 @@ export default function App() {
 
     const playSound =  () => {
         if (player.playing) {
+            console.log("playing, so ill pause");
             player.pause();
         } else {
+            console.log("paused, so ill play");
             player.play();  
         }
     };
 
     const stopSound =  () => {
+        console.log("Im going to stop");
         player.pause();
         player.seekTo(0);
     };

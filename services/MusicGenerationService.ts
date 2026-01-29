@@ -7,7 +7,7 @@ const REPLICATE_API_URL = 'https://api.replicate.com/v1/predictions'; // Placeho
 
 // Using Meta's MusicGen model
 const REPLICATE_API_KEY = process.env.EXPO_PUBLIC_REPLICATE_API_KEY
-const REPLICATE_MODEL_VERSION = process.env.EXPO_REPLICATE_MODEL_VERSION;
+const REPLICATE_MODEL_VERSION = process.env.EXPO_PUBLIC_REPLILCATE_MODEL_VERSION;
 const HF_API_KEY = process.env.EXPO_PUBLIC_HF_API_KEY;
 const HF_MODEL_URL = `https://router.huggingface.co/models/facebook/musicgen-small`;
 
@@ -44,7 +44,7 @@ export async function generateSong(lyrics: string, style: string, mood:string): 
                 tags: [style, mood],
                 //mv: 'mureka-7.5',
                 model_version: 'large', //meta-musicgen
-                duration: 15
+                duration: 20
                 
             }
         };
@@ -108,60 +108,64 @@ export async function generateSong(lyrics: string, style: string, mood:string): 
         //     reader.readAsDataURL(blob);
         // });
 
-        console.log("Need to change from mureka response handling to replicate response")
+        console.log("Need to change from mureka response handling to replicate response... in the process")
+        console.log("Response from Replicate: ", response)
 
         const startData = await response.json();
         const taskID = startData.id;
-        console.log("SERVICE: GEN SONG: Mureka Task ID:", taskID);
+        console.log("SERVICE: GEN SONG: REPLICATE Task ID:", taskID);
 
-        // Polling for result
-        let attempts = 0;
-        const maxAttempts = 20;
-
-        while (attempts < maxAttempts) {
-            console.log(`SERVICE: GEN SONG: Polling for result... Attempt ${attempts + 1}`);
-            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds before polling
-            attempts++;
-            
-            const statusResponse = await fetch(`${MUREKA_QUERY_URL}/${taskID}`, {
-                headers: { 'Authorization': `Bearer ${MUREKA_API_KEY}` }
-            });
-
-            const statusData = await statusResponse.json();
-            const status = statusData.status;
-            console.log(`SERVICE: GEN SONG: Status: ${status}, Attempts: ${attempts}`);
-
-            if (status === 'succeeded') {
-                //SUCCESS
-                const songData = statusData.choices[0];
-                const remoteURL = songData.audio_url || songData.mp3_url;
-
-                console.log("SERVICE: GEN SONG: Song generation succeeded. URL:", remoteURL);
-
-                //Download and save locally
-                const fileDir = documentDirectory || '';
-                const fileUri = fileDir + `mureka_${taskID}.mp3`;
-
-                const downloadRes = await downloadAsync(remoteURL, fileUri);
-
-                return {
-                    audioUrl: downloadRes.uri,
-                    title: songData.title || `Mureka ${mood} Song`,
-                    duration: 30,
-                };
-            }
-
-            if (status === 'failed' || status === 'cancelled') {
-                throw new Error(`Mureka Task Failed ${statusData.error}.`);
-                }
-            }
-
-            throw new Error('Mureka song generation timed out.');
-
-
-    } catch (error) {
-        console.error('Error generating song:', error);
+        let prediction = startData;
         
+        const getUrl = prediction.urls.get; //  link to poll
+
+        let status = prediction.status;
+
+        while (status !== 'succeeded' && status !== 'failed' && status !== 'canceled') {
+            console.log(`Status: ${status}... waiting 2s`);
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+
+            const pollResponse = await fetch(getUrl, {
+                headers: {
+                    'Authorization': `Bearer ${REPLICATE_API_KEY}`,
+                    'Content-Type': 'application/json',
+                }
+            });
+            
+            prediction = await pollResponse.json();
+            status = prediction.status;
+        }
+
+        if (status !== 'succeeded') {
+            console.error("REPLICATE Song Generation Failed Logs:", prediction.logs);
+            throw new Error(`AI Generation failed: ${status}`);
+        }
+
+        //After generation, get audio from the link and save
+        const remoteAudioUrl = prediction.output;
+        console.log("REPLICATE AI Generation Finished! Downloading audio from:", remoteAudioUrl);
+
+        if (!remoteAudioUrl) {
+            throw new Error("REPLICATE AI finished but returned no audio URL.");
+        }
+
+        const fileDir = documentDirectory || '';
+        const fileUri = fileDir + `replicate_${prediction.id}.wav`;
+
+        const downloadRes = await downloadAsync(remoteAudioUrl, fileUri);
+
+        console.log(" Song saved to:", downloadRes.uri);
+
+        return {
+            audioUrl: downloadRes.uri,
+            title: `Generated ${mood} Track`,
+            duration: 20,
+        };
+
+
+    } catch (error:any) {
+        console.error('REPLICATE ERROR : Error generating song:', error);
+        alert("AI Error: " + error.message); 
         return null;
     }
 }
