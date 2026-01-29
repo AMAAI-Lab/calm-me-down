@@ -11,7 +11,7 @@ import { fetchNewsData, fetchWeatherData, NewsData, WeatherData } from './servic
 
 const PPLX_API_KEY = process.env.EXPO_PUBLIC_PPLX_API_KEY;
 
-const DEBUG_MODE = true;
+const DEBUG_MODE = false;
 
 
 type UserInput = {
@@ -111,7 +111,7 @@ export default function App() {
     }
     //const prompt = `Create song lyrics for: ${input.name}, Mood: ${input.currentMood} -> ${input.desiredMood}. Health: HR ${healthData.heartRate}, Steps ${healthData.steps}.`;
 
-    // Enhanced Prompt with Weather and News
+    //Enhanced Prompt with Weather and News
     const prompt = `
       Act as a creative songwriter. Create a personalized song lyric for a user.
       
@@ -131,8 +131,10 @@ export default function App() {
       GOAL: Please write cohesive, therapeutic lyrics for a song (Verse1, Chorus, Verse 2, Outro) that reflect their physical state and environment (weather/location), subtly referencing the news mood if relevant, to help them transition to their desired mood.The song should be motivational and uplifting, helping them reach their desired emotional state through music. 
       Keep the lyrics concise, around 200 words, and ensure they flow well together. Avoid generic phrases and focus on creating a unique piece that resonates with their situation and location. Thank you!
       Use the physical state and environment details to add depth and personalization to the lyrics, not just as literal references.
+      
 
     `;
+    //const prompt = `Generate only 1 quote, max 10 words`;
 
     setLyricPrompt(prompt);
     setGeneratingLyrics(true);
@@ -173,6 +175,8 @@ export default function App() {
     }
 
     // Call PPLX API to generate lyrics
+
+    let currentLyrics = ''; //local variable to hold lyrics
     try {
         const response = await fetch('https://api.perplexity.ai/chat/completions', {
             method: 'POST',
@@ -196,6 +200,7 @@ export default function App() {
         }
 
         const lyrics = data.choices[0]?.message?.content || '';
+        currentLyrics = lyrics;
         setGeneratedLyrics(lyrics);
     } catch (error: any) {
         Alert.alert('Error', error.message || 'An error occurred while generating lyrics.');
@@ -205,9 +210,9 @@ export default function App() {
 
     // Generate Song Audio
     setGeneratingSong(true);
-    console.log("Generating song with lyrics:", generatedLyrics);
+    console.log("Generating song with lyrics:", currentLyrics);
     try {
-        const generatedSong = await generateSong(generatedLyrics || 'Uplifting song', input.favoriteGenre, input.desiredMood);
+        const generatedSong = await generateSong(currentLyrics || 'Uplifting song', input.favoriteGenre, input.desiredMood);
         if (generatedSong) {
             setSong(generatedSong);
         } else {

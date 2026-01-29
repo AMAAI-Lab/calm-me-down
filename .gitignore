@@ -45,3 +45,6 @@ app-example
 
 #backup files
 App_bkup*.tsx
+
+music-api-commands
+.env
