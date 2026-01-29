@@ -25,8 +25,8 @@ export type GeneratedSong = {
 
 // --- MAIN SERVICE ENTRY POINT ---
 export async function generateSong(lyrics: string, style: string, mood: string): Promise<GeneratedSong | null> {
-    console.log(`🎵 SERVICE: Starting Generation using [${CURRENT_PROVIDER}]`);
-    console.log(`📝 Lyrics snippet: "${lyrics.substring(0, 30)}..."`);
+    console.log(` SERVICE: Starting Generation using [${CURRENT_PROVIDER}]`);
+    console.log(` Lyrics snippet: "${lyrics.substring(0, 30)}..."`);
 
     switch (CURRENT_PROVIDER) {
         case 'SUNO':
@@ -50,7 +50,7 @@ async function generateWithSuno(lyrics: string, style: string, mood: string): Pr
 
     try {
         // Step 1: Create Task
-        console.log("🚀 SUNO: Sending generation request...");
+        console.log(" SUNO: Sending generation request...");
         const payload = {
             custom_mode: true,
             mv: 'sonic-v4-5', // Using the latest model from your curl
@@ -89,13 +89,13 @@ async function generateWithSuno(lyrics: string, style: string, mood: string): Pr
 
         const startData = await response.json();
         const taskId = startData.task_id;
-        console.log(`⏳ SUNO: Task Started. ID: ${taskId}`);
+        console.log(` SUNO: Task Started. ID: ${taskId}`);
 
         // Step 2: Poll for Completion
         return await pollSunoTask(taskId, mood);
 
     } catch (error: any) {
-        console.error("❌ SUNO Error:", error);
+        console.error(" SUNO Error:", error);
         Alert.alert("Generation Failed", error.message);
         return null;
     }
@@ -128,7 +128,7 @@ async function pollSunoTask(taskId: string, mood: string): Promise<GeneratedSong
             console.log(`Checking Status (${attempts}/${maxAttempts}): ${status}`);
 
             if (status === 'succeeded') {
-                console.log("✅ SUNO: Generation Succeeded!");
+                console.log(" SUNO: Generation Succeeded!");
                 const audioUrl = clip.audio_url;
                 
                 // Step 3: Download & Save
@@ -154,7 +154,7 @@ async function generateWithReplicate(lyrics: string, style: string, mood: string
     }
 
     try {
-        console.log("🚀 REPLICATE: Sending request...");
+        console.log(" REPLICATE: Sending request...");
         const payload = {
             version: REPLICATE_MODEL_VERSION,
             input: {
@@ -178,7 +178,7 @@ async function generateWithReplicate(lyrics: string, style: string, mood: string
         }
 
         console.log("REPLICATE request: ", req)
-        
+
         const response = await fetch(REPLICATE_API_URL, {
             method: 'POST',
             headers: {
@@ -221,7 +221,7 @@ async function generateWithReplicate(lyrics: string, style: string, mood: string
         }
 
     } catch (error: any) {
-        console.error("❌ REPLICATE Error:", error);
+        console.error(" REPLICATE Error:", error);
         Alert.alert("AI Error", error.message);
         return null;
     }
@@ -231,7 +231,7 @@ async function generateWithReplicate(lyrics: string, style: string, mood: string
 // 3. MOCK PROVIDER (Fallback)
 // =================================================================
 async function generateWithMock(lyrics: string, style: string, mood: string): Promise<GeneratedSong | null> {
-    console.log("🎭 MOCK: Simulating generation...");
+    console.log("MOCK: Simulating generation...");
     await new Promise(resolve => setTimeout(resolve, 2000)); // Fake delay
 
     const TEST_SONG_URL = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
@@ -242,7 +242,7 @@ async function generateWithMock(lyrics: string, style: string, mood: string): Pr
 // SHARED HELPER: Download & Save
 // =================================================================
 async function downloadAndSaveAudio(remoteUrl: string, fileName: string, mood: string, providerName: string): Promise<GeneratedSong> {
-    console.log(`⬇️ Downloading audio from: ${remoteUrl}`);
+    console.log(` Downloading audio from: ${remoteUrl}`);
     
     if (!remoteUrl) throw new Error("No audio URL provided to download.");
 
@@ -250,7 +250,7 @@ async function downloadAndSaveAudio(remoteUrl: string, fileName: string, mood: s
     const fileUri = fileDir + fileName;
 
     const downloadRes = await downloadAsync(remoteUrl, fileUri);
-    console.log(`💾 Saved to: ${downloadRes.uri}`);
+    console.log(` Saved to: ${downloadRes.uri}`);
 
     return {
         audioUrl: downloadRes.uri,
