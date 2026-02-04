@@ -48,6 +48,10 @@ export default function App() {
 
   const [generatedLyrics, setGeneratedLyrics] = useState('');
   const [song, setSong] = useState<GeneratedSong | null>(null);
+
+  const [songQueue, setSongQueue] = useState<GeneratedSong[]>([]);
+  const [currentSongIndex, setCurrentSongIndex] = useState<number>(0);
+
   //const [sound, setSound] = useState<Audio.Sound | null>(null);
   const player = useAudioPlayer(song?.audioUrl || '');
   const [isPlaying, setIsPlaying] = useState(false);
@@ -61,6 +65,8 @@ export default function App() {
       if (status !== 'granted') return;
       let loc = await Location.getCurrentPositionAsync({});
       setLocation(loc);
+
+      console.log("location set");
 
       // Fetch weather and news data based on location
       const weather = await fetchWeatherData(loc.coords.latitude, loc.coords.longitude);
@@ -162,6 +168,7 @@ export default function App() {
                     provider: 'MOCK'
                 };
                 setSong(mockSongData);
+                setSongQueue([mockSongData]);
                 setGeneratingSong(false);
             }, 1500); // 1.5s delay for song generation simulation
         }, 1000); // 1s delay for lyrics simulation
@@ -216,6 +223,8 @@ export default function App() {
         const generatedSong = await generateSong(currentLyrics || 'Uplifting song', input.favoriteGenre, input.desiredMood);
         if (generatedSong) {
             setSong(generatedSong);
+            setSongQueue([generatedSong]);
+            setCurrentSongIndex(0);
         } else {
             Alert.alert('Song Generation Failed', 'Could not generate song audio.');
         }
@@ -263,12 +272,15 @@ export default function App() {
     const playSound =  () => {
         if (player.playing) {
             //console.log("playing, so ill pause");
+            setIsPlaying(false);
             player.pause();
         } else {
             //console.log("paused, so ill play");
+            setIsPlaying(true);
             player.play();  
         }
         //if song is finished, play from beginning TODO
+        generateNextSong();
 
     };
 
@@ -277,6 +289,138 @@ export default function App() {
         player.pause();
         player.seekTo(0);
     };
+
+
+
+    const handlePrevSong = () => {
+      if (currentSongIndex === 0) return;
+      setCurrentSongIndex((i) => i-1);
+      setSong(songQueue[currentSongIndex]);
+    };
+
+    const handleNextSong = () => {
+      if (currentSongIndex === songQueue.length -1) return;
+      setCurrentSongIndex((i) => i + 1);
+      setSong(songQueue[currentSongIndex]);
+    };
+
+    const generateNextSong = () => {
+      setTimeout(async () => {
+        if (songQueue.length > currentSongIndex + 1) return;
+        console.log("generating song number: ", currentSongIndex + 1);
+
+        const latestHealthData = await fetchAppleHealthData();
+         const prompt = `
+            Act as a creative songwriter. Create a personalized song lyric for same user.
+            
+            USER: ${input.name}, ${input.age}y/o. 
+            MOOD JOURNEY: ${input.currentMood} -> ${input.desiredMood}.
+            MUSIC TASTE: ${input.favoriteGenre} (Style of ${input.favoriteBand}).
+            
+            PHYSICAL STATE:
+            - Heart Rate: ${latestHealthData.heartRate} bpm
+            - Activity: ${latestHealthData.steps} steps
+            
+            ENVIRONMENT:
+            - Location: ${weatherData?.city || 'Unknown'}
+            - Weather: ${weatherData?.temperature ? `${weatherData.temperature}°C, ${weatherData.description}` : 'Unknown'}
+            - Local Vibe (News Headline): "${newsData?.headline || 'N/A'}"
+            
+            GOAL: Please write lyrics for the next song (Verse1, Chorus, Verse 2, Outro) that reflect their 
+            physical state and environment (weather/location), subtly referencing the news mood if relevant, 
+            to help them transition from their previous mood to the desired mood.The song should be a mix of both previous and desired mood, 
+            motivational and uplifting, helping them reach their desired emotional state through music. 
+            Keep the lyrics concise, around 200 words, and ensure they flow well together. 
+            Avoid generic phrases and focus on creating a unique piece that resonates with their situation and location. Thank you!
+            Use the physical state and environment details to add depth and personalization to the lyrics, not just as literal references.
+            
+
+          `;
+
+          if (DEBUG_MODE) {
+            console.log("DEBUG MODE: Generating mock lyrics for next song...");
+
+            setTimeout(async () => {
+              const mockLyrics = `(Mock Lyrics for ${input?.name || "N/A"})\n\nIn the city of ${weatherData?.city || "Dreams"},\nHeart beating at ${latestHealthData?.heartRate || "steady"} pace,\nWalking through the ${weatherData?.description || "mist"},\nFinding my own space.\n\nFrom ${input?.currentMood || ""} shadows,\nTo ${input?.desiredMood || ""} light,\nThis song guides me,\nThrough the day and night.`;
+
+              const nextSongIdx = (currentSongIndex || 0) + 2;
+              setTimeout(() => {
+                const mockSongData: GeneratedSong = {
+                  audioUrl: `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-${nextSongIdx}.mp3`, // Public domain MP3
+                  title: `Song for ${input?.name || "N/A"}`,
+                  duration: 30,
+                  provider: "MOCK",
+                };
+
+                setSongQueue((prev) => [...prev, mockSongData]);
+              }, 1000);
+            }, 500);
+
+            return;
+          }
+          //Check for PPLX_API_KEY
+        if (!PPLX_API_KEY) {
+          console.warn("PPLX API Key Missing");
+          return;
+        }
+
+        // Call PPLX API to generate lyrics
+        let currentLyrics = ""; //local variable to hold lyrics
+        try {
+          const response = await fetch(
+            "https://api.perplexity.ai/chat/completions",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${PPLX_API_KEY}`,
+              },
+              body: JSON.stringify({
+                model: "sonar-pro",
+                messages: [{ role: "user", content: prompt }],
+                max_tokens: 500,
+                temperature: 0.7,
+              }),
+            },
+          );
+
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error?.message || "Failed to generate lyrics.");
+          }
+
+          const lyrics = data.choices[0]?.message?.content || "";
+          currentLyrics = lyrics;
+        } catch (error: any) {
+          console.error(
+            "An error occurred while generating next song lyrics.",
+            error.message,
+          );
+        }
+
+          // Generate Song Audio
+        console.log("Generating next song with lyrics:", currentLyrics);
+        try {
+          const generatedSong = await generateSong(
+            currentLyrics || "Uplifting song",
+            input?.favoriteGenre || "N/A",
+            input?.desiredMood || "N/A",
+          );
+          if (generatedSong) {
+            setSongQueue((prev) => [...prev, generatedSong]);
+          } else {
+            console.warn("Could not generate next song audio.");
+          }
+        } catch (error: any) {
+          console.error(
+            "An error occurred while generating next song audio.",
+            error.message,
+          );
+        }
+      }, 3000); //generate next song after 3 seconds
+    };
+
+   
 
     // React.useEffect(() => {
     //     return sound
@@ -426,11 +570,31 @@ export default function App() {
                                     onPress={stopSound} 
                                     color="#FF6B6B" 
                                 />
+                                <View style={{ width: 10 }} />
+                                <Button
+                                  title="⏭"
+                                  onPress={handleNextSong}
+                                  disabled={currentSongIndex === songQueue.length - 1}
+                                  color="#E91E63"
+                                />
                             </View>
-                        </View>
-                    )}
+                          </View>
+              )}
             </View>
-          ) }
+          )}
+          {songQueue?.length ? (
+            <View style={{ marginTop: 20, opacity: 0.5 }}>
+              <Text style={{ color: "#ece5e5", fontSize: 12 }}>
+                Current music number: {currentSongIndex + 1}
+              </Text>
+            </View>
+          ) : null}
+          <View style={{ marginTop: 20, opacity: 0.5 }}>
+            <Text style={{ color: "#ece5e5", fontSize: 12 }}>
+              Number of songs generated: {songQueue.length}
+            </Text>
+          </View>
+
 
           {/*Debug Prompt Display*/}
           {generatedLyrics && lyricPrompt ? (

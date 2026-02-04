@@ -20,10 +20,12 @@ export async function fetchWeatherData(lat: number, lon: number): Promise<Weathe
         console.warn('OpenWeatherMap API key is not set. Returning null weather data.');
         return { temperature: 25, description: "Clear Sky 'Mock'", condition: "Clear", city: "Singapore 'Mock'" };
     }
+    console.log("fetching weather1")
 
     try {
         const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${OPENWEATHER_API_KEY}`;
         const response = await fetch(url);
+        console.log("fetching weather2")
         const data = await response.json();
 
         if (response.ok) {

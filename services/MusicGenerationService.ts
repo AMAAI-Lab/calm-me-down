@@ -3,10 +3,11 @@ import { Alert } from 'react-native';
 
 // --- CONFIGURATION ---
 // Change this to 'SUNO', 'REPLICATE', or 'MOCK' to switch engines
-const CURRENT_PROVIDER: 'SUNO' | 'REPLICATE' | 'MOCK' = 'REPLICATE'; 
+const CURRENT_PROVIDER: 'SUNO_ORG'|'SUNO' | 'REPLICATE' | 'MOCK' = 'SUNO_ORG'; 
 
 // --- API KEYS & CONSTANTS ---
 const SUNO_API_KEY = process.env.EXPO_PUBLIC_SUNO_API_KEY; // Verify this is set in .env
+const SUNO_ORG_API_KEY = process.env.EXPO_PUBLIC_SUNO_ORG_API_KEY;
 const REPLICATE_API_KEY = process.env.EXPO_PUBLIC_REPLICATE_API_KEY;
 
 const SUNO_URL_CREATE = 'https://api.musicapi.ai/api/v1/sonic/create';
@@ -29,6 +30,8 @@ export async function generateSong(lyrics: string, style: string, mood: string):
     console.log(` Lyrics snippet: "${lyrics.substring(0, 30)}..."`);
 
     switch (CURRENT_PROVIDER) {
+        case 'SUNO_ORG':
+            return await generateWithSunoOrg(lyrics, style, mood);
         case 'SUNO':
             return await generateWithSuno(lyrics, style, mood);
         case 'REPLICATE':
@@ -37,6 +40,138 @@ export async function generateSong(lyrics: string, style: string, mood: string):
         default:
             return await generateWithMock(lyrics, style, mood);
     }
+}
+// =================================================================
+// 1_1. SUNO_ORG PROVIDER (MusicAPI.ai)
+// =================================================================
+async function generateWithSunoOrg(lyrics:string, style: string, mood: string): Promise<GeneratedSong | null> {
+    if (!SUNO_ORG_API_KEY) {
+        Alert.alert("Config Error", "Missing EXPO_PUBLIC_SUNO_ORG_API_KEY");
+        return null;
+    }
+
+    try {
+        console.log("SUNO_ORG: Sending request");
+        // SunoAPI.org uses 'custom' mode for specific lyrics
+        const payload = {
+            customMode: true,
+            instrumental: false,
+            model: 'V4_5ALL',
+            callBackUrl: 'https://api.example.com/callback',
+            prompt: 'A calm and relaxing piano track with soft melodies',
+            style: 'Classical',
+            title: 'Peaceful Piano Meditation',
+            personaId: 'persona_123',
+            negativeTags: 'Heavy Metal, Upbeat Drums',
+            vocalGender: 'm',
+            styleWeight: 0.65,
+            weirdnessConstraint: 0.65,
+            audioWeight: 0.65
+        };
+        const response = await fetch('https://api.sunoapi.org/api/v1/generate', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${SUNO_ORG_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+            const err = await response.text();
+            throw new Error(`SunoOrg Failed: ${err}`);
+        }
+        const data = await response.json();
+        // Returns { code: 200, data: { taskId: "..." } } usually
+        // OR sometimes it returns the list directly if immediate.
+
+        const req = {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${SUNO_ORG_API_KEY}`,
+                'Prefer': 'wait',
+            },
+            body: JSON.stringify(payload),
+        }
+
+        console.log("SUNO_ORG request: ", req)
+        console.log("SUNO_ORG resp: ", response)
+
+        
+        
+        const taskId = data.data?.taskId || data.id; 
+        console.log(` SUNO_ORG: Task ID: ${taskId}`);
+
+        return await pollSunoOrg(taskId, mood);
+
+    } catch (error: any) {
+        console.error(" SUNO_ORG Error:", error);
+        Alert.alert("Generation Failed", error.message);
+        return null;
+    }
+}
+
+async function pollSunoOrg(taskId: string, mood: string): Promise<GeneratedSong | null> {
+    const maxAttempts = 150; 
+    let attempts = 0;
+
+    console.log(`Polling Task ${taskId} (Max 5 mins)...`);
+
+    while (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3s
+        attempts++;
+
+        // SunoAPI.org polling endpoint
+        const response = await fetch(`https://api.sunoapi.org/api/v1/generate/record-info?taskId=${taskId}`, {
+            headers: { 'Authorization': `Bearer ${SUNO_ORG_API_KEY}` }
+        });
+
+        const data = await response.json();
+        const info = data.data; // Usually data.data[0] or just data.data
+
+        // Check structure (API response format varies slightly by account tier)
+        const status = info?.status || info?.[0]?.status;
+        
+        console.log(`Checking Status (${attempts}): ${status}`);
+
+        if (status === 'SUCCESS' || status === 'completed' || status === "FIRST_SUCCESS") {
+            // Success!
+            let songList: any[] = [];
+
+            if (Array.isArray(info)) {
+                // Case A: Info is the list itself
+                songList = info;
+            } else if (info.response && Array.isArray(info.response.sunoData)) {
+                // Case B: Your Log (Nested inside response.sunoData)
+                songList = info.response.sunoData;
+            } else {
+                // Case C: Fallback single object
+                songList = [info];
+            }
+
+            // 3. Find the first song that actually has a URL
+            // (In FIRST_SUCCESS, the second song usually has an empty "" url)
+            const validSong = songList.find((item: any) => 
+                (item.audioUrl && item.audioUrl.length > 0) || 
+                (item.audio_url && item.audio_url.length > 0)
+            );
+
+            if (validSong) {
+                const finalUrl = validSong.audioUrl || validSong.audio_url;
+                console.log("SUNO_ORG: Generation Complete! URL:", finalUrl);
+                return await downloadAndSaveAudio(finalUrl, `suno_org_${taskId}.mp3`, mood, 'SUNO_ORG');
+            } else {
+                console.log(`Status is ${status} but valid audio URL not found yet.`);
+            }
+        }
+        else if (status === 'TEXT_SUCCESS') {
+            // Do NOTHING. Just log it and keep looping.
+            console.log(" Lyrics written... waiting for audio...");
+        }
+        else if (status === 'FAILED') throw new Error("SunoOrg task failed.");
+    }
+    
+    throw new Error("SunoOrg timeout.");
 }
 
 // =================================================================
@@ -433,14 +568,14 @@ async function downloadAndSaveAudio(remoteUrl: string, fileName: string, mood: s
 
 // //mock song generation service
 // // export async function generateSong(lyrics: string, style: string, mood: string): Promise<GeneratedSong | null> {
-// //     console.log("🎵 MOCK SERVICE: Starting 'Generation'...");
+// //     console.log(" MOCK SERVICE: Starting 'Generation'...");
     
 // //     // 1. Simulate API Processing Time (2 seconds)
 // //     // This lets you test your "Loading..." spinners in the UI
 // //     await new Promise(resolve => setTimeout(resolve, 2000)); 
 
 // //     try {
-// //         console.log("⬇️ Downloading test audio...");
+// //         console.log("Downloading test audio...");
         
 // //         // 2. Download the test song to a local temp file
 // //         // We use downloadAsync because it's more robust for large files
@@ -456,7 +591,7 @@ async function downloadAndSaveAudio(remoteUrl: string, fileName: string, mood: s
 // //             throw new Error("Failed to download mock song");
 // //         }
 
-// //         console.log("✅ Mock Song saved to:", downloadRes.uri);
+// //         console.log("Mock Song saved to:", downloadRes.uri);
 
 // //         // 3. Return the LOCAL URI (just like the real service will)
 // //         return {
@@ -466,7 +601,7 @@ async function downloadAndSaveAudio(remoteUrl: string, fileName: string, mood: s
 // //         };
 
 // //     } catch (error: any) {
-// //         console.error('❌ Error inside mock generateSong:', error);
+// //         console.error(' Error inside mock generateSong:', error);
 // //         Alert.alert("Mock Failed", error.message);
 // //         return null;
 // //     }
