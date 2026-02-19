@@ -1,606 +1,800 @@
-import { FontAwesome5 } from '@expo/vector-icons';
-import { useAudioPlayer } from 'expo-audio';
-import * as Location from 'expo-location';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Button, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { authorizeAppleHealth, fetchAppleHealthData, fetchFitbitData, fetchGarminData, HealthData } from './services/HealthService';
-import { GeneratedSong, generateSong } from './services/MusicGenerationService';
-import { fetchNewsData, fetchWeatherData, NewsData, WeatherData } from './services/WeatherNewsService';
-
-
-const PPLX_API_KEY = process.env.EXPO_PUBLIC_PPLX_API_KEY;
-
-const DEBUG_MODE = false;
-
-
-type UserInput = {
-  name: string;
-  age: string;
-  currentMood: string;
-  desiredMood: string;
-  favoriteGenre: string;
-  favoriteBand: string;
-};
-
-type Provider = 'Apple Health' | 'Fitbit' | 'Garmin';
+import { FontAwesome5 } from "@expo/vector-icons";
+import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
+import * as Location from "expo-location";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import Slider from "@react-native-community/slider";
+import { fetchAppleHealthData, HealthData } from "./services/HealthService";
+import {
+  downloadAndSaveAudio,
+  GeneratedSong,
+  generatelyrics,
+  generateSong,
+  onFinalReady,
+} from "./services/MusicGenerationService";
+import {
+  fetchNewsData,
+  fetchWeatherData,
+  NewsData,
+  WeatherData,
+} from "./services/WeatherNewsService";
+import {
+  DEBUG_MODE,
+  EMOTION_OPTIONS,
+  LISTEN_BEFORE_GENERATE_MS,
+  UserInput,
+} from "./constants/appConstants";
+import HealthProviderSection from "./components/ui/health-provider";
+import EmotionInput from "./components/ui/emotion-input";
+import BiomarkerCard from "./components/ui/biomarker-card";
+import { buildEmotionPath } from "./services/EmotionPathService";
+import CommonButton from "./components/ui/common-button";
+import EmotionDropdown from "./components/ui/emotion-dropdown";
 
 export default function App() {
   //console.log("DEBUG ENV: ", process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY);
   const [input, setInput] = useState<UserInput>({
-    name: '', age: '', currentMood: '', desiredMood: '', favoriteGenre: '', favoriteBand: '',
+    name: "",
+    age: "",
+    currentMood: "",
+    desiredMood: "",
+    favoriteGenre: "",
+    favoriteBand: "",
+    activity: "",
   });
-  const [provider, setProvider] = useState<Provider>('Apple Health');
   const [healthData, setHealthData] = useState<HealthData | null>(null);
-  const [location, setLocation] = useState<Location.LocationObject | null>(null);
+  const [location, setLocation] = useState<Location.LocationObject | null>(
+    null,
+  );
 
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [newsData, setNewsData] = useState<NewsData | null>(null);
-
-  const [loading, setLoading] = useState(false);
 
   const [generatingLyrics, setGeneratingLyrics] = useState(false);
 
   const [generatingSong, setGeneratingSong] = useState(false);
 
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [lyricPrompt, setLyricPrompt] = useState('');
+  const [lyricPrompt, setLyricPrompt] = useState("");
 
-  const [generatedLyrics, setGeneratedLyrics] = useState('');
-  const [song, setSong] = useState<GeneratedSong | null>(null);
+  const [generatedLyrics, setGeneratedLyrics] = useState("");
 
+  const [emotionPath, setEmotionPath] = useState<string[]>([]);
   const [songQueue, setSongQueue] = useState<GeneratedSong[]>([]);
   const [currentSongIndex, setCurrentSongIndex] = useState<number>(0);
+  const [generationLockedForIndex, setGenerationLockedForIndex] = useState<
+    number | null
+  >(null);
+  const [downloadedAudios, setDownloadedAudios] = useState<
+    Record<number, string>
+  >({});
 
-  //const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const player = useAudioPlayer(song?.audioUrl || '');
-  const [isPlaying, setIsPlaying] = useState(false);
+  const currentSong = songQueue[currentSongIndex] ?? null;
+  const player = useAudioPlayer(currentSong?.audioUrl || "");
+  const playerStatus = useAudioPlayerStatus(player);
 
-  const handleInputChange = (key: keyof UserInput, value: string) => setInput(prev => ({ ...prev, [key]: value }));
-  const isFormComplete = useMemo(() => Object.values(input).every(val => val.trim() !== ''), [input]);
+  const generateTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [sliderValue, setSliderValue] = useState(0);
+  const [isSliding, setIsSliding] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  const handleInputChange = (key: keyof UserInput, value: string) =>
+    setInput((prev) => ({ ...prev, [key]: value }));
+  const isFormComplete = useMemo(
+    () => Object.values(input).every((val) => val.trim() !== ""),
+    [input],
+  );
 
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
+      if (status !== "granted") return;
       let loc = await Location.getCurrentPositionAsync({});
       setLocation(loc);
 
       console.log("location set");
 
       // Fetch weather and news data based on location
-      const weather = await fetchWeatherData(loc.coords.latitude, loc.coords.longitude);
+      const weather = await fetchWeatherData(
+        loc.coords.latitude,
+        loc.coords.longitude,
+      );
       setWeatherData(weather);
 
       // Using US as default country code for news; can be enhanced to use location data
-      const news = await fetchNewsData('us');
+      const news = await fetchNewsData("us");
       setNewsData(news);
-      
     })();
   }, []);
 
-  const handleAuthorizeAndFetch = useCallback(async () => {
-    if (provider !== 'Apple Health') {
-      Alert.alert('Unavailable', 'Using mock data for ' + provider);
-      setHealthData(provider === 'Fitbit' ? await fetchFitbitData() : await fetchGarminData());
-      return;
-    }
-    if (Platform.OS !== 'ios') {
-        Alert.alert('Platform Warning', 'Apple Health is only available on iOS.');
-        return;
-    }
-    setLoading(true);
-    let authorized = isAuthorized;
-    try {
-        if (!isAuthorized) {
-            authorized = await authorizeAppleHealth();
-            setIsAuthorized(authorized);
-        }
-        if (authorized) {
-            const data = await fetchAppleHealthData();
-            setHealthData(data);
-            Alert.alert('Success', `Fetched HR: ${data.heartRate || 'N/A'}, Steps: ${data.steps || 'N/A'}`);
-        } else {
-            Alert.alert('Authorization Failed', 'Please grant permissions in Health app.');
-        }
-    } catch (e: any) {
-        Alert.alert('Error', e.message);
-    } finally {
-        setLoading(false);
-    }
-  }, [isAuthorized, provider]);
-
   const generateLyricsAndSong = async () => {
     if (!isFormComplete || !healthData) {
-      Alert.alert('Missing Data', 'Complete form and fetch data first.');
+      console.warn(`Missing form data!`);
       return;
     }
     //const prompt = `Create song lyrics for: ${input.name}, Mood: ${input.currentMood} -> ${input.desiredMood}. Health: HR ${healthData.heartRate}, Steps ${healthData.steps}.`;
 
-    //Enhanced Prompt with Weather and News
-    const prompt = `
-      Act as a creative songwriter. Create a personalized song lyric for a user.
-      
-      USER: ${input.name}, ${input.age}y/o. 
-      MOOD JOURNEY: ${input.currentMood} -> ${input.desiredMood}.
-      MUSIC TASTE: ${input.favoriteGenre} (Style of ${input.favoriteBand}).
-      
-      PHYSICAL STATE:
-      - Heart Rate: ${healthData.heartRate} bpm
-      - Activity: ${healthData.steps} steps
-      
-      ENVIRONMENT:
-      - Location: ${weatherData?.city || 'Unknown'}
-      - Weather: ${weatherData?.temperature ? `${weatherData.temperature}°C, ${weatherData.description}` : 'Unknown'}
-      - Local Vibe (News Headline): "${newsData?.headline || 'N/A'}"
-      
-      GOAL: Please write cohesive, therapeutic lyrics for a song (Verse1, Chorus, Verse 2, Outro) that reflect their physical state and environment (weather/location), subtly referencing the news mood if relevant, to help them transition to their desired mood.The song should be motivational and uplifting, helping them reach their desired emotional state through music. 
-      Keep the lyrics concise, around 200 words, and ensure they flow well together. Avoid generic phrases and focus on creating a unique piece that resonates with their situation and location. Thank you!
-      Use the physical state and environment details to add depth and personalization to the lyrics, not just as literal references.
-      
+    const emotionTrajectory = buildEmotionPath(
+      input.currentMood,
+      input.desiredMood,
+    );
+    console.log("fetched emotion Trajectory: ", emotionTrajectory);
+    // MUSIC TASTE: ${input.favoriteGenre} (Style of ${input.favoriteBand}).
+    setEmotionPath(emotionTrajectory);
 
+    const prompt = `
+      You are a creative songwriter. Generate original song lyrics personalized to the following inputs:
+
+      USER
+      - Name: ${input.name}
+      - Age: ${input.age}
+
+      MUSIC STYLE
+      - Genre preference: ${input.favoriteGenre}
+      - Stylistic influence (do NOT imitate or quote): ${input.favoriteBand}
+      - mood: ${emotionTrajectory[0]}
+
+      PHYSICAL CONTEXT
+      - Heart rate: ${healthData.heartRate} bpm
+      - Daily activity: ${healthData.steps} steps
+      - Current or upcoming activity: ${input.activity || "None specified"}
+
+      ENVIRONMENT
+      - Location: ${weatherData?.city || "Unknown"}
+      - Weather: ${weatherData?.temperature ? `${weatherData.temperature}°C, ${weatherData.description}` : "Unknown"}
+      - News mood cue (optional): ${newsData?.headline || "N/A"}
+
+      TASK:
+      Write cohesive song lyrics.
+      1. Structure: Verse 1, Chorus, Verse 2, Chorus (exact repeat), and Outro.
+      2. Tone: motivational, uplifting, and emotionally grounded.
+      3. Length: Target ~180–220 words total.
+      4. Integration: Integrate physical state, environment, and (if relevant) the news mood subtly and metaphorically
+      5. Originality: Avoid clichés and generic motivational phrases.
+      6. Style: Use the genre and stylistic influence only for rhythm, imagery, and tone guidance—do not imitate or quote them.
+
+      OUTPUT FORMAT (STRICT):
+      Return ONLY valid JSON. No preamble or markdown. Use the following structure:
+      {
+        "lyrics": {
+          "verse1": "...",
+          "chorus": "...",
+          "verse2": "...",
+          "outro": "..."
+        }
+      }
     `;
-    //const prompt = `Generate only 1 quote, max 10 words`;
 
     setLyricPrompt(prompt);
     setGeneratingLyrics(true);
-    setGeneratedLyrics('');
-    setSong(null);
+    setGeneratedLyrics("");
 
     // DEBUG MODE: Skip API calls
     if (DEBUG_MODE) {
-        console.log("DEBUG MODE: Generating mock lyrics and song...");
-        
-        // Mock Latency
-        setTimeout(async () => {
-            // 1. Mock Lyrics
-            const mockLyrics = `(Mock Lyrics for ${input.name})\n\nIn the city of ${weatherData?.city || 'Dreams'},\nHeart beating at ${healthData.heartRate || 'steady'} pace,\nWalking through the ${weatherData?.description || 'mist'},\nFinding my own space.\n\nFrom ${input.currentMood} shadows,\nTo ${input.desiredMood} light,\nThis song guides me,\nThrough the day and night.`;
-            setGeneratedLyrics(mockLyrics);
-            setGeneratingLyrics(false);
+      console.log("DEBUG MODE: Generating mock lyrics and song...");
 
-            // 2. Mock Song (Immediately after)
-            setGeneratingSong(true);
-            setTimeout(() => {
-                const mockSongData: GeneratedSong = {
-                    audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', // Public domain MP3
-                    title: `Song for ${input.name}`,
-                    duration: 30,
-                    provider: 'MOCK'
-                };
-                setSong(mockSongData);
-                setSongQueue([mockSongData]);
-                setGeneratingSong(false);
-            }, 1500); // 1.5s delay for song generation simulation
-        }, 1000); // 1s delay for lyrics simulation
-        
-        return;
-    }
+      // Mock Latency
+      setTimeout(async () => {
+        // 1. Mock Lyrics
+        const mockLyrics = `(Mock Lyrics for ${input.name})\n\nIn the city of ${weatherData?.city || "Dreams"},\nHeart beating at ${healthData.heartRate || "steady"} pace,\nWalking through the ${weatherData?.description || "mist"},\nFinding my own space.\n\nFrom ${input.currentMood} shadows,\nTo ${input.desiredMood} light,\nThis song guides me,\nThrough the day and night.`;
+        setGeneratedLyrics(mockLyrics);
+        setGeneratingLyrics(false);
 
-    //Check for PPLX_API_KEY
-    if (!PPLX_API_KEY) {
-      Alert.alert('API Key Missing', 'Please set the PPLX API key to generate lyrics.');
+        // 2. Mock Song (Immediately after)
+        setGeneratingSong(true);
+        setTimeout(() => {
+          const mockSongData: GeneratedSong = {
+            audioUrl:
+              // "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", // Public domain MP3
+              "https://wephotos1.s3.amazonaws.com/bCv0l1ycm2Ac.mp3",
+            title: `Song for ${input.name}`,
+            duration: 30,
+            provider: "MOCK",
+          };
+          setSongQueue([mockSongData]);
+          setCurrentSongIndex(0);
+          setGeneratingSong(false);
+        }, 1500); // 1.5s delay for song generation simulation
+      }, 1000); // 1s delay for lyrics simulation
+
       return;
     }
 
-    // Call PPLX API to generate lyrics
-
-    let currentLyrics = ''; //local variable to hold lyrics
+    // Generate song lyrics
+    let currentLyrics = "";
     try {
-        const response = await fetch('https://api.perplexity.ai/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${PPLX_API_KEY}`
-            },
-            body: JSON.stringify({
-                model: "sonar-pro",
-                messages: [
-                    { role: "user", content: prompt }
-                ],
-                max_tokens: 500,
-                temperature: 0.7,
-            })
-        });
-
-        const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.error?.message || 'Failed to generate lyrics.');
-        }
-
-        const lyrics = data.choices[0]?.message?.content || '';
+      const lyrics = await generatelyrics(prompt);
+      if (lyrics) {
         currentLyrics = lyrics;
         setGeneratedLyrics(lyrics);
+      } else {
+        console.warn("Lyrics Generation Failed!");
+      }
     } catch (error: any) {
-        Alert.alert('Error', error.message || 'An error occurred while generating lyrics.');
+      console.error(
+        "An error occurred while generating lyrics:",
+        error.message,
+      );
     } finally {
-        setGeneratingLyrics(false);
+      setGeneratingLyrics(false);
     }
 
     // Generate Song Audio
     setGeneratingSong(true);
-    console.log("Generating song with lyrics:", currentLyrics);
+    console.log(
+      `Generating song with lyrics: ${(currentLyrics || "").substring(0, 50)}...`,
+    );
     try {
-        const generatedSong = await generateSong(currentLyrics || 'Uplifting song', input.favoriteGenre, input.desiredMood);
-        if (generatedSong) {
-            setSong(generatedSong);
-            setSongQueue([generatedSong]);
-            setCurrentSongIndex(0);
-        } else {
-            Alert.alert('Song Generation Failed', 'Could not generate song audio.');
-        }
-        setGeneratingSong(false);
-    } catch (error: any) {
-        Alert.alert('Error', error.message || 'An error occurred while generating song audio.');
-        setGeneratingSong(false);
-    }
-}
-
-    // Play generated song audio
-    // async function playSound() {
-    //     if (!song?.audioUrl) return;
-    //     console.log('Playing song from URL:', song.audioUrl);
-
-    //     try {
-    //         if (sound) {
-    //             console.log('Resuming Sound');
-    //             await sound.playAsync();
-    //             setIsPlaying(true);
-    //             return;
-    //         }
-
-    //         console.log('Loading Sound');
-    //         const { sound: newSound } = await Audio.Sound.createAsync(
-    //             { uri: song.audioUrl },
-    //             { shouldPlay: true }
-    //         );
-    //         setSound(newSound);
-    //         setIsPlaying(true);
-
-    //         newSound.setOnPlaybackStatusUpdate((status) => {
-    //             if (status.isLoaded && status.didJustFinish) {
-    //                 setIsPlaying(false);
-    //                 newSound.setPositionAsync(0);
-    //             }
-    //         });
-    //     }
-    //     catch (error) {
-    //         console.error('Error playing sound:', error);
-    //         Alert.alert('Playback Error', 'An error occurred while trying to play the song.');
-    //     }
-    // }
-
-    const playSound =  () => {
-        if (player.playing) {
-            //console.log("playing, so ill pause");
-            setIsPlaying(false);
-            player.pause();
-        } else {
-            //console.log("paused, so ill play");
-            setIsPlaying(true);
-            player.play();  
-        }
-        //if song is finished, play from beginning TODO
-        generateNextSong();
-
-    };
-
-    const stopSound =  () => {
-        //console.log("Im going to stop");
-        player.pause();
-        player.seekTo(0);
-    };
-
-
-
-    const handlePrevSong = () => {
-      if (currentSongIndex === 0) return;
-      setCurrentSongIndex((i) => i-1);
-      setSong(songQueue[currentSongIndex]);
-    };
-
-    const handleNextSong = () => {
-      if (currentSongIndex === songQueue.length -1) return;
-      setCurrentSongIndex((i) => i + 1);
-      setSong(songQueue[currentSongIndex]);
-    };
-
-    const generateNextSong = () => {
-      setTimeout(async () => {
-        if (songQueue.length > currentSongIndex + 1) return;
-        console.log("generating song number: ", currentSongIndex + 1);
-
-        const latestHealthData = await fetchAppleHealthData();
-         const prompt = `
-            Act as a creative songwriter. Create a personalized song lyric for same user.
-            
-            USER: ${input.name}, ${input.age}y/o. 
-            MOOD JOURNEY: ${input.currentMood} -> ${input.desiredMood}.
-            MUSIC TASTE: ${input.favoriteGenre} (Style of ${input.favoriteBand}).
-            
-            PHYSICAL STATE:
-            - Heart Rate: ${latestHealthData.heartRate} bpm
-            - Activity: ${latestHealthData.steps} steps
-            
-            ENVIRONMENT:
-            - Location: ${weatherData?.city || 'Unknown'}
-            - Weather: ${weatherData?.temperature ? `${weatherData.temperature}°C, ${weatherData.description}` : 'Unknown'}
-            - Local Vibe (News Headline): "${newsData?.headline || 'N/A'}"
-            
-            GOAL: Please write lyrics for the next song (Verse1, Chorus, Verse 2, Outro) that reflect their 
-            physical state and environment (weather/location), subtly referencing the news mood if relevant, 
-            to help them transition from their previous mood to the desired mood.The song should be a mix of both previous and desired mood, 
-            motivational and uplifting, helping them reach their desired emotional state through music. 
-            Keep the lyrics concise, around 200 words, and ensure they flow well together. 
-            Avoid generic phrases and focus on creating a unique piece that resonates with their situation and location. Thank you!
-            Use the physical state and environment details to add depth and personalization to the lyrics, not just as literal references.
-            
-
-          `;
-
-          if (DEBUG_MODE) {
-            console.log("DEBUG MODE: Generating mock lyrics for next song...");
-
-            setTimeout(async () => {
-              const mockLyrics = `(Mock Lyrics for ${input?.name || "N/A"})\n\nIn the city of ${weatherData?.city || "Dreams"},\nHeart beating at ${latestHealthData?.heartRate || "steady"} pace,\nWalking through the ${weatherData?.description || "mist"},\nFinding my own space.\n\nFrom ${input?.currentMood || ""} shadows,\nTo ${input?.desiredMood || ""} light,\nThis song guides me,\nThrough the day and night.`;
-
-              const nextSongIdx = (currentSongIndex || 0) + 2;
-              setTimeout(() => {
-                const mockSongData: GeneratedSong = {
-                  audioUrl: `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-${nextSongIdx}.mp3`, // Public domain MP3
-                  title: `Song for ${input?.name || "N/A"}`,
-                  duration: 30,
-                  provider: "MOCK",
-                };
-
-                setSongQueue((prev) => [...prev, mockSongData]);
-              }, 1000);
-            }, 500);
-
-            return;
-          }
-          //Check for PPLX_API_KEY
-        if (!PPLX_API_KEY) {
-          console.warn("PPLX API Key Missing");
-          return;
-        }
-
-        // Call PPLX API to generate lyrics
-        let currentLyrics = ""; //local variable to hold lyrics
-        try {
-          const response = await fetch(
-            "https://api.perplexity.ai/chat/completions",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${PPLX_API_KEY}`,
-              },
-              body: JSON.stringify({
-                model: "sonar-pro",
-                messages: [{ role: "user", content: prompt }],
-                max_tokens: 500,
-                temperature: 0.7,
-              }),
-            },
-          );
-
-          const data = await response.json();
-          if (!response.ok) {
-            throw new Error(data.error?.message || "Failed to generate lyrics.");
-          }
-
-          const lyrics = data.choices[0]?.message?.content || "";
-          currentLyrics = lyrics;
-        } catch (error: any) {
-          console.error(
-            "An error occurred while generating next song lyrics.",
-            error.message,
-          );
-        }
-
-          // Generate Song Audio
-        console.log("Generating next song with lyrics:", currentLyrics);
-        try {
-          const generatedSong = await generateSong(
-            currentLyrics || "Uplifting song",
-            input?.favoriteGenre || "N/A",
-            input?.desiredMood || "N/A",
-          );
-          if (generatedSong) {
-            setSongQueue((prev) => [...prev, generatedSong]);
-          } else {
-            console.warn("Could not generate next song audio.");
-          }
-        } catch (error: any) {
-          console.error(
-            "An error occurred while generating next song audio.",
-            error.message,
-          );
-        }
-      }, 3000); //generate next song after 3 seconds
-    };
-
-   
-
-    // React.useEffect(() => {
-    //     return sound
-    //       ? () => {
-    //           console.log('Unloading Sound');
-    //           sound.unloadAsync(); }
-    //       : undefined;
-    //   }, [sound]);
-  
-
-  const renderHealthProviderSection = () => {
-      const isApple = provider === 'Apple Health';
-      // const isReady = !isApple || (isApple && Platform.OS === 'ios'); // Not strictly needed for rendering, button handles disabled state
-      
-      
-      return (
-        <View style={styles.stepContainer}>
-          <Text style={styles.stepTitle}>4. Connect & Fetch Data</Text>
-          <Text style={styles.providerStatus}>
-            {isApple && Platform.OS !== 'ios' ? "iOS required" : (isAuthorized ? 'Authorized' : 'Authorization Required')}
-          </Text>
-          <Button
-            title={isApple ? (isAuthorized ? 'Re-Fetch Data' : 'Authorize & Fetch') : `Fetch Mock Data`}
-            onPress={handleAuthorizeAndFetch}
-            disabled={loading} // Simplified disabled logic
-            color="#4CAF50"
-          />
-        </View>
+      const generatedSong = await generateSong(
+        currentLyrics || "Uplifting song",
+        input.favoriteGenre,
+        input.desiredMood,
+        currentSongIndex,
       );
-  }
+      if (generatedSong) {
+        setSongQueue([generatedSong]);
+      } else {
+        console.warn("Song Generation Failed, Could not generate song audio.");
+      }
+      setGeneratingSong(false);
+    } catch (error: any) {
+      console.error(
+        "An error occurred while generating next song audio.",
+        error.message,
+      );
+      setGeneratingSong(false);
+    }
+  };
+
+  const playSound = () => {
+    if (playerStatus.playing) {
+      player.pause();
+    } else {
+      player.play();
+    }
+    //if song is finished, play from beginning TODO
+  };
+
+  const handlePrevSong = () => {
+    if (currentSongIndex === 0) return;
+    setCurrentSongIndex((i) => i - 1);
+  };
+  const handleNextSong = () => {
+    if (currentSongIndex === songQueue.length - 1) return;
+    setCurrentSongIndex((i) => i + 1);
+  };
+
+  useEffect(() => {
+    const audios = Object.entries(downloadedAudios);
+    audios.forEach(([idx, uri]) => {
+      const index = parseInt(idx);
+      if (index === currentSongIndex || !uri?.length) return;
+
+      setSongQueue((prev) => {
+        const updated = [...prev];
+        updated[index] = {
+          ...updated[index],
+          audioUrl: uri,
+        };
+        return updated;
+      });
+
+      setDownloadedAudios((prev) => ({ ...prev, [index]: "" }));
+    });
+
+    // Auto playing song when previous or next button is pressed
+    if (!currentSong) return;
+    player.play();
+  }, [currentSong?.audioUrl]);
+
+  useEffect(() => {
+    if (playerStatus.didJustFinish) {
+      //Song ended, auto-playing next
+      handleNextSong();
+    }
+  }, [playerStatus.playing]);
+
+  const generateNextSong = async () => {
+    if (
+      songQueue.length > currentSongIndex + 1 ||
+      emotionPath.length < currentSongIndex
+    ) {
+      return;
+    }
+
+    const latestHealthData = await fetchAppleHealthData();
+
+    const currentMood =
+      emotionPath?.[currentSongIndex + 1] || input.currentMood;
+    console.log("Mood input for next song: ", currentMood);
+
+    const prompt = `
+      You are a creative songwriter. Generate original song lyrics personalized to the following inputs:
+
+      USER
+      - Name: ${input.name}
+      - Age: ${input.age}
+
+      MUSIC STYLE
+      - Genre preference: ${input.favoriteGenre}
+      - Stylistic influence (do NOT imitate or quote): ${input.favoriteBand}
+      - mood: ${currentMood}
+
+      PHYSICAL CONTEXT
+      - Heart rate: ${latestHealthData.heartRate} bpm
+      - Daily activity: ${latestHealthData.steps} steps
+      - Current or upcoming activity: ${input.activity || "None specified"}
+
+      ENVIRONMENT
+      - Location: ${weatherData?.city || "Unknown"}
+      - Weather: ${weatherData?.temperature ? `${weatherData.temperature}°C, ${weatherData.description}` : "Unknown"}
+      - News mood cue (optional): ${newsData?.headline || "N/A"}
+
+      TASK:
+      Write cohesive song lyrics.
+      1. Structure: Verse 1, Chorus, Verse 2, Chorus (exact repeat), and Outro.
+      2. Tone: motivational, uplifting, and emotionally grounded.
+      3. Length: Target ~180-220 words total.
+      4. Integration: Integrate physical state, environment, and (if relevant) the news mood subtly and metaphorically
+      5. Originality: Avoid clichés and generic motivational phrases.
+      6. Style: Use the genre and stylistic influence only for rhythm, imagery, and tone guidance—do not imitate or quote them.
+
+      OUTPUT FORMAT (STRICT):
+      Return ONLY valid JSON. No preamble or markdown. Use the following structure:
+      {
+        "lyrics": {
+          "verse1": "...",
+          "chorus": "...",
+          "verse2": "...",
+          "outro": "..."
+        }
+      }
+    `;
+
+    if (DEBUG_MODE) {
+      console.log("DEBUG MODE: Generating mock lyrics and next song...");
+
+      setTimeout(async () => {
+        const nextSongIdx = ((currentSongIndex + 1) % 15) + 1;
+        const mockSongData: GeneratedSong = {
+          audioUrl: `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-${nextSongIdx}.mp3`, // Public domain MP3
+          title: `Song for ${input?.name || "N/A"}`,
+          duration: 30,
+          provider: "MOCK",
+        };
+
+        setSongQueue((prev) => [...prev, mockSongData]);
+      }, 500);
+
+      return;
+    }
+
+    // Generate song lyrics
+    let currentLyrics = "";
+    try {
+      const lyrics = await generatelyrics(prompt);
+      if (lyrics) {
+        currentLyrics = lyrics;
+      } else {
+        console.warn("Lyrics Generation failed for next song!");
+      }
+    } catch (error: any) {
+      console.error(
+        "An error occurred while generating lyrics for next song:",
+        error.message,
+      );
+    }
+
+    // Generate Song Audio
+    console.log(
+      `Generating next song with lyrics: "${(currentLyrics || "").substring(0, 30)}..."`,
+    );
+    try {
+      const generatedSong = await generateSong(
+        currentLyrics || "Uplifting song",
+        input?.favoriteGenre || "N/A",
+        input?.desiredMood || "N/A",
+        currentSongIndex + 1,
+      );
+      if (generatedSong) {
+        setSongQueue((prev) => [...prev, generatedSong]);
+      } else {
+        console.warn("Could not generate next song audio.");
+      }
+    } catch (error: any) {
+      console.error(
+        "An error occurred while generating next song audio.",
+        error.message,
+      );
+      setGenerationLockedForIndex(null);
+    }
+  };
+
+  useEffect(() => {
+    if (generateTimerRef.current) {
+      clearTimeout(generateTimerRef.current);
+      generateTimerRef.current = null;
+    }
+
+    if (
+      !playerStatus.playing ||
+      !currentSong ||
+      generationLockedForIndex === currentSongIndex ||
+      songQueue.length > currentSongIndex + 1
+    ) {
+      return;
+    }
+    if (emotionPath.length < currentSongIndex) {
+      console.warn(
+        "Could not generate next song as songs generation completed for all the emotions in the path!",
+      );
+      return;
+    }
+
+    generateTimerRef.current = setTimeout(() => {
+      console.log(
+        `--Listen threshold reached. Generating next song for index ${currentSongIndex}`,
+      );
+
+      setGenerationLockedForIndex(currentSongIndex);
+      generateNextSong();
+    }, LISTEN_BEFORE_GENERATE_MS);
+
+    return () => {
+      if (generateTimerRef.current) {
+        clearTimeout(generateTimerRef.current);
+        generateTimerRef.current = null;
+      }
+    };
+  }, [playerStatus.playing, currentSongIndex, currentSong?.audioUrl]);
+
+  useEffect(() => {
+    setGenerationLockedForIndex(null);
+  }, [currentSongIndex]);
+
+  useEffect(() => {
+    onFinalReady(async (taskId, finalUrl) => {
+      const index = songQueue.findIndex((s) => s?.id === taskId);
+      if (index === -1) return;
+
+      const { audioUrl: localUri } = await downloadAndSaveAudio(
+        finalUrl,
+        `suno_${taskId}.mp3`,
+        "mock-mood",
+        "MOCK",
+      );
+
+      if (index === currentSongIndex) {
+        setDownloadedAudios((prev) => ({ ...prev, [index]: localUri }));
+      } else {
+        setSongQueue((prev) => {
+          const updated = [...prev];
+          updated[index] = {
+            ...updated[index],
+            audioUrl: localUri,
+          };
+          return updated;
+        });
+      }
+    });
+  }, [songQueue, currentSongIndex]);
+
+  const duration = playerStatus.duration ?? 0;
+  const currentTime = playerStatus.currentTime ?? 0;
+  const handleSlidingComplete = async (value: number) => {
+    try {
+      await player.seekTo(value);
+    } catch (err: any) {
+      console.warn("Seek failed: ", err?.message);
+    }
+  };
+  const formatTime = (seconds: number) => {
+    if (!seconds) return "0:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+  };
+
+  useEffect(() => {
+    if (!playerStatus.isLoaded) return;
+
+    if (!isSliding) {
+      setSliderValue(playerStatus.currentTime ?? 0);
+    }
+  }, [playerStatus.currentTime, isSliding]);
 
   return (
-    <SafeAreaProvider >
-      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
         {/* Removed the intermediate View causing layout issues */}
-        <ScrollView 
-            style={styles.scrollView} 
-            contentContainerStyle={styles.scrollContent} 
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={true} // Helpful for debugging scrolling
-            onContentSizeChange={(w,h) => console.log('Content height:', h)}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={true} // Helpful for debugging scrolling
+          onContentSizeChange={(w, h) => console.log("Content height:", h)}
+          scrollEnabled={!isDropdownOpen}
+          nestedScrollEnabled={true}
         >
           <Text style={styles.header}>Emotion to Lyric Generator</Text>
-          
-          <View style={styles.stepContainer}>
-            <Text style={styles.stepTitle}>1. Profile & Mood</Text>
-            {Object.keys(input).map(key => (
-              <TextInput 
-                key={key}
-                style={styles.input} 
-                placeholder={key}
-                placeholderTextColor="#999" 
-                value={input[key as keyof UserInput]} 
-                onChangeText={(text) => handleInputChange(key as keyof UserInput, text)} 
-              />
-            ))}
-          </View>
 
-          <View style={styles.stepContainer}>
-            <Text style={styles.stepTitle}>2. Environment </Text>
-            {location ? (
-                // <Text style={styles.infoText}>
-                // {`Lat: ${location.coords.latitude.toFixed(2)}, Lng: ${location.coords.longitude.toFixed(2)}`}
-                // </Text>
-                <View>
-                        <Text style={styles.infoText}>
-                            {weatherData?.city || `Lat: ${location.coords.latitude.toFixed(2)}`}
-                        </Text>
-                        {weatherData && (
-                            <Text style={styles.infoText}>
-                                {weatherData.temperature}°C - {weatherData.description}
-                            </Text>
-                        )}
-                        {newsData && (
-                            <Text style={[styles.infoText, {fontStyle: 'italic', fontSize: 12, marginTop: 5}]}>
-                                News: {newsData.headline}...
-                            </Text>
-                        )}
-                    </View>
-            ) : (
-                <ActivityIndicator color="#4CAF50" />
-            )}
-          </View>
+          <EmotionInput
+            label="Your name"
+            placeholder="e.g. Alex"
+            icon={<FontAwesome5 name="user" size={16} color="#fff" />}
+            value={input.name}
+            onChange={(t) => handleInputChange("name", t)}
+          />
+          <EmotionInput
+            label="Your age"
+            placeholder="e.g. 24"
+            icon={<FontAwesome5 name="birthday-cake" size={16} color="#fff" />}
+            value={input.age}
+            onChange={(t) => handleInputChange("age", t)}
+          />
+          {/* <EmotionInput
+            label="How are you feeling?"
+            placeholder="Sad, Calm, Mysterious, Tense..."
+            icon={<FontAwesome5 name="microphone" size={16} color="#fff" />}
+            value={input.currentMood}
+            onChange={(t) => handleInputChange("currentMood", t)}
+          />
+          <EmotionInput
+            label="How would you like to feel?"
+            placeholder="Joyful, Excited, Cheerful, Energetic..."
+            icon={<FontAwesome5 name="bolt" size={16} color="#fff" />}
+            value={input.desiredMood}
+            onChange={(t) => handleInputChange("desiredMood", t)}
+          /> */}
+          <EmotionDropdown
+            label="How are you feeling?"
+            placeholder="Sad, Calm, Mysterious, Tense..."
+            value={input.currentMood}
+            moods={EMOTION_OPTIONS}
+            icon={<FontAwesome5 name="microphone" size={16} color="#fff" />}
+            onChange={(t) => handleInputChange("currentMood", t)}
+          />
+          <EmotionDropdown
+            label="How would you like to feel?"
+            placeholder="Joyful, Excited, Cheerful, Energetic..."
+            value={input.desiredMood}
+            moods={EMOTION_OPTIONS}
+            icon={<FontAwesome5 name="bolt" size={16} color="#fff" />}
+            onChange={(t) => handleInputChange("desiredMood", t)}
+          />
+          {/* <SearchableDropdown
+            label="How are you feeling?"
+            value={input.currentMood}
+            options={EMOTION_OPTIONS}
+            placeholder="Sad, Calm, Mysterious, Tense..."
+            onSelect={(t) => handleInputChange("currentMood", t)}
+            onOpen={() => setIsDropdownOpen(true)}
+            onClose={() => setIsDropdownOpen(false)}
+          />
+          <SearchableDropdown
+            label="How would you like to feel?"
+            value={input.desiredMood}
+            options={EMOTION_OPTIONS}
+            placeholder="Joyful, Excited, Cheerful, Energetic..."
+            onSelect={(t) => handleInputChange("desiredMood", t)}
+            onOpen={() => setIsDropdownOpen(true)}
+            onClose={() => setIsDropdownOpen(false)}
+          /> */}
+          <EmotionInput
+            label="Favorite genre"
+            placeholder="Pop, Rock, Indie, EDM..."
+            icon={<FontAwesome5 name="music" size={16} color="#fff" />}
+            value={input.favoriteGenre}
+            onChange={(t) => handleInputChange("favoriteGenre", t)}
+          />
+          <EmotionInput
+            label="Favorite band / artist"
+            placeholder="Coldplay, Arctic Monkeys, Imagine Dragons..."
+            icon={<FontAwesome5 name="headphones" size={16} color="#fff" />}
+            value={input.favoriteBand}
+            onChange={(t) => handleInputChange("favoriteBand", t)}
+          />
+          <EmotionInput
+            label="Are you starting some activity?"
+            placeholder="Workout, Walking, Studying, Meditating..."
+            icon={<FontAwesome5 name="running" size={16} color="#fff" />}
+            value={input.activity}
+            onChange={(t) => handleInputChange("activity", t)}
+          />
 
-          <View style={styles.stepContainer}>
-            <Text style={styles.stepTitle}>3. Select Provider</Text>
-            <View style={styles.providerGrid}>
-                {(['Apple Health', 'Fitbit', 'Garmin'] as Provider[]).map(p => (
-                    <TouchableOpacity key={p} style={[styles.providerButton, provider === p && styles.providerButtonSelected]} onPress={() => setProvider(p)}>
-                        <FontAwesome5 name={p === 'Apple Health' ? 'apple' : (p === 'Fitbit' ? 'heartbeat' : 'circle')} size={24} color={provider === p ? '#121212' : '#ccc'}/>
-                        <Text style={[styles.providerButtonText, provider !== p && {color: '#ccc'}]}>{p}</Text>
-                    </TouchableOpacity>
-                ))}
-            </View>
-          </View>
-
-          {/* Explicitly calling the render function here */}
-          {renderHealthProviderSection()}
-
-          {healthData && (
-            <View style={styles.stepContainer}>
-              <Text style={styles.stepTitle}>5. Health Data</Text>
-              <Text style={styles.dataText}>Heart Rate: {healthData.heartRate || 'N/A'} BPM</Text>
-              <Text style={styles.dataText}>Steps: {healthData.steps || 'N/A'}</Text>
-            </View>
+          {!healthData && (
+            <HealthProviderSection
+              updateHealthData={(data) => setHealthData(data)}
+            />
           )}
 
-          {isFormComplete && healthData && (
-            <View style={styles.stepContainer}>
-              <Button 
-                    title={generatingLyrics || generatingSong ? "Creating Magic..." : "Generate Lyrics & Song"} 
-                    onPress={generateLyricsAndSong} 
-                    disabled={generatingLyrics || generatingSong}
-                    color="#007CC3" 
+          <Text style={styles.sectionTitle}>Current Biomarkers</Text>
+          <View style={styles.bioGrid}>
+            <BiomarkerCard
+              icon={<FontAwesome5 name="heart" size={20} color="#b36cff" />}
+              label="Heart Rate"
+              value={`${healthData?.heartRate || "--"} bpm`}
+            />
+            <BiomarkerCard
+              icon={<FontAwesome5 name="walking" size={20} color="#b36cff" />}
+              label="Steps"
+              value={`${healthData?.steps || "--"}`}
+            />
+
+            <BiomarkerCard
+              icon={
+                <FontAwesome5
+                  name="thermometer-half"
+                  size={20}
+                  color="#b36cff"
                 />
-            </View>
+              }
+              label="Temperature"
+              value={`${weatherData?.temperature || "--"}°C`}
+            />
+            <BiomarkerCard
+              icon={
+                <FontAwesome5 name="map-marker-alt" size={20} color="#b36cff" />
+              }
+              label="Location"
+              value={weatherData?.city || "--"}
+            />
+          </View>
+
+          {isFormComplete && healthData && (
+            <Pressable
+              onPress={generateLyricsAndSong}
+              disabled={generatingLyrics || generatingSong}
+              style={styles.generateButton}
+            >
+              <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}>
+                {generatingLyrics || generatingSong
+                  ? "Creating Magic..."
+                  : "Generate Lyrics & Song"}
+              </Text>
+            </Pressable>
           )}
 
           {/* Display  lyrics and Audio Player */}
           {generatedLyrics.length > 0 && (
-            <View style={styles.lyricsContainer}>
+            <View style={styles.stepContainer}>
               <Text style={styles.lyricsTitle}>Your Song</Text>
               <Text style={styles.lyricsText}>{generatedLyrics}</Text>
 
-              <Text style={{ marginTop: 15, fontSize: 16, fontWeight: 'bold', color: '#fff', textAlign: 'center' }}>Generated Song Audio</Text>
+              {currentSong && (
+                <>
+                  {currentSong?.title && (
+                    <Text
+                      style={{
+                        marginTop: 15,
+                        marginBottom: 10,
+                        fontSize: 16,
+                        fontWeight: "bold",
+                        color: "#fff",
+                        textAlign: "center",
+                      }}
+                    >
+                      🎵 {currentSong.title}
+                    </Text>
+                  )}
 
-              {/* {song && (
-                <View style={styles.playerContainer}>
-                    <Text style = {styles.infoText} >{song.title}</Text>
-                    <Button title="Play Song" onPress={playSound} color="#4CAF50" />
-                </View>
-              )}
-              { generatingSong && <ActivityIndicator color="#4CAF50" style={{ marginTop: 10 }} />} */}
+                  <View style={styles.progressContainer}>
+                    <Text style={styles.timeText}>
+                      {formatTime(currentTime)}
+                    </Text>
 
-              {song && (
-                        <View style={styles.playerContainer}>
-                            <Text style={[styles.infoText, {fontWeight: 'bold', marginBottom: 10}]}>🎵 {song.title}</Text>
-                            <View style={styles.controlsRow}>
-                                <Button 
-                                    title={player.playing ? "Pause" : "▶️ Play Song"} 
-                                    onPress={playSound} 
-                                    color="#E91E63" 
-                                />
-                                <View style={{width: 20}} /> 
-                                <Button 
-                                    title="⏹ Stop" 
-                                    onPress={stopSound} 
-                                    color="#FF6B6B" 
-                                />
-                                <View style={{ width: 10 }} />
-                                <Button
-                                  title="⏭"
-                                  onPress={handleNextSong}
-                                  disabled={currentSongIndex === songQueue.length - 1}
-                                  color="#E91E63"
-                                />
-                            </View>
-                          </View>
+                    <Slider
+                      style={{ flex: 1, marginHorizontal: 10 }}
+                      minimumValue={0}
+                      maximumValue={duration || 1}
+                      value={sliderValue}
+                      minimumTrackTintColor="#9b5cff"
+                      maximumTrackTintColor="#444"
+                      thumbTintColor="#fff"
+                      onSlidingStart={() => setIsSliding(true)}
+                      onValueChange={(value) => setSliderValue(value)}
+                      onSlidingComplete={(value) => {
+                        setIsSliding(false);
+                        handleSlidingComplete(value);
+                      }}
+                    />
+
+                    <Text style={styles.timeText}>{formatTime(duration)}</Text>
+                  </View>
+
+                  <View style={styles.playerBar}>
+                    <CommonButton
+                      onPress={handlePrevSong}
+                      disabled={currentSongIndex === 0}
+                      icon={
+                        <FontAwesome5
+                          name="step-backward"
+                          size={22}
+                          color="#fff"
+                        />
+                      }
+                    />
+
+                    {playerStatus.isBuffering || !playerStatus.isLoaded ? (
+                      <ActivityIndicator color="#fff" size={30} />
+                    ) : (
+                      <CommonButton
+                        onPress={playSound}
+                        style={styles.playButton}
+                        icon={
+                          <FontAwesome5
+                            name={playerStatus.playing ? "pause" : "play"}
+                            size={24}
+                            color="#9b5cff"
+                          />
+                        }
+                      />
+                    )}
+
+                    <CommonButton
+                      onPress={handleNextSong}
+                      disabled={currentSongIndex === songQueue.length - 1}
+                      icon={
+                        <FontAwesome5
+                          name="step-forward"
+                          size={22}
+                          color="#fff"
+                        />
+                      }
+                    />
+                  </View>
+                </>
               )}
             </View>
           )}
-          {songQueue?.length ? (
-            <View style={{ marginTop: 20, opacity: 0.5 }}>
-              <Text style={{ color: "#ece5e5", fontSize: 12 }}>
-                Current music number: {currentSongIndex + 1}
-              </Text>
-            </View>
-          ) : null}
+
           <View style={{ marginTop: 20, opacity: 0.5 }}>
+            <Text style={{ color: "#ece5e5", fontSize: 12 }}>
+              Is playing: {playerStatus?.playing ? "Yes" : "No"}
+            </Text>
             <Text style={{ color: "#ece5e5", fontSize: 12 }}>
               Number of songs generated: {songQueue.length}
             </Text>
           </View>
+          {songQueue?.length ? (
+            <View style={{ marginTop: 20, opacity: 0.5 }}>
+              {/* <Text style={{ color: "#ece5e5", fontSize: 12 }}>
+                Current duration: {player.currentTime}
+              </Text> */}
+              <Text style={{ color: "#ece5e5", fontSize: 12 }}>
+                Current music number: {currentSongIndex + 1}
+              </Text>
+              <Text style={{ color: "#ece5e5", fontSize: 12 }}>
+                Audio source: {currentSong.audioUrl}
+              </Text>
+            </View>
+          ) : null}
 
-
+          {emotionPath?.length ? (
+            <View style={{ marginTop: 20, opacity: 0.5 }}>
+              <Text style={{ color: "#ece5e5", fontSize: 12 }}>
+                Emotion Path:
+              </Text>
+              <Text style={{ color: "#ccc", fontSize: 12 }}>
+                {emotionPath.join(", ")}
+              </Text>
+            </View>
+          ) : null}
           {/*Debug Prompt Display*/}
           {generatedLyrics && lyricPrompt ? (
-            <View style={{ marginTop: 20, opacity: 0.5}}>
-              <Text style={{ color: '#ece5e5', fontSize: 12 }}>Debug Prompt:</Text>
-              <Text style={{ color: '#ccc', fontSize: 12 }}>{lyricPrompt}</Text>
+            <View style={{ marginTop: 20, opacity: 0.5 }}>
+              <Text style={{ color: "#ece5e5", fontSize: 12 }}>
+                Debug Prompt:
+              </Text>
+              <Text style={{ color: "#ccc", fontSize: 12 }}>{lyricPrompt}</Text>
             </View>
           ) : null}
         </ScrollView>
@@ -610,34 +804,89 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#121212' },
+  safeArea: { flex: 1, backgroundColor: "#171A1F" },
   scrollView: { flex: 1 }, // Ensure ScrollView takes available space
-  scrollContent: {  padding: 20, paddingBottom: 150 }, // Ensure content grows to fill and adds bottom padding
-  header: { fontSize: 24, fontWeight: 'bold', color: '#fff', textAlign: 'center', marginVertical: 20 },
-  stepContainer: { backgroundColor: '#1e1e1e', padding: 16, borderRadius: 10, marginVertical: 10, borderWidth: 1, borderColor: '#333' },
-  stepTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginBottom: 12 },
-  input: { backgroundColor: '#333', color: '#fff', padding: 12, borderRadius: 8, marginBottom: 10, fontSize: 16, borderWidth: 1, borderColor: '#444' },
-  infoText: { fontSize: 14, color: '#ccc', textAlign: 'center' },
-  providerStatus: { fontSize: 14, color: '#4CAF50', textAlign: 'center', marginBottom: 10 },
-  lyricsContainer: { backgroundColor: '#2a2a2a', padding: 16, borderRadius: 10, marginTop: 16 },
-  lyricsTitle: { fontSize: 16, fontWeight: 'bold', color: '#fff', marginBottom: 8 },
-  lyricsText: { fontSize: 14, color: '#ccc' },
-  dataText: { color: '#fff', fontSize: 16, marginVertical: 4 },
-  providerGrid: { flexDirection: 'row', justifyContent: 'space-around', gap: 8 },
-  providerButton: { alignItems: 'center', padding: 10, borderRadius: 8, borderWidth: 2, borderColor: '#333', backgroundColor: '#121212', flex: 1, height: 80, justifyContent: 'center' },
-  providerButtonSelected: { borderColor: '#4CAF50', backgroundColor: '#4CAF50' },
-  providerButtonText: { fontSize: 12, color: '#fff', marginTop: 4, fontWeight: '600' },
-  playerContainer: { 
-    marginTop: 20,
-    alignItems: 'center',
-    padding: 15,
-    backgroundColor: '#333',
+  scrollContent: { padding: 20, paddingBottom: 150 }, // Ensure content grows to fill and adds bottom padding
+  header: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#fff",
+    textAlign: "center",
+    marginVertical: 20,
+  },
+  stepContainer: {
+    backgroundColor: "#171A1F",
+    padding: 16,
     borderRadius: 10,
- },
- controlsRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginTop: 10 
+    marginVertical: 10,
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  stepTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#fff",
+    marginBottom: 12,
+  },
+  providerStatus: {
+    fontSize: 14,
+    color: "#b36cff",
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  lyricsTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#fff",
+    marginBottom: 8,
+  },
+  lyricsText: { fontSize: 14, color: "#ccc" },
+  generateButton: {
+    marginTop: 20,
+    marginBottom: 10,
+    alignItems: "center",
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 2,
+    backgroundColor: "#9b5cff",
+  },
+  disabled: {
+    opacity: 0.4,
+  },
+  sectionTitle: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginVertical: 12,
+  },
+  bioGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  playerBar: {
+    height: 70,
+    backgroundColor: "#9b5cff",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+    paddingHorizontal: 20,
+  },
+  playButton: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: "#fff",
+  },
+  progressContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 15,
+  },
+  timeText: {
+    color: "#ccc",
+    fontSize: 12,
+    textAlign: "center",
   },
 });

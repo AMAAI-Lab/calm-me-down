@@ -48,3 +48,8 @@ App_bkup*.tsx
 
 music-api-commands
 .env
+
+#ignore bkup files
+*bkup*
+
+#ignore 
