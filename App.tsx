@@ -1,4 +1,5 @@
 import { FontAwesome5 } from "@expo/vector-icons";
+import Slider from "@react-native-community/slider";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import * as Location from "expo-location";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -8,11 +9,21 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import Slider from "@react-native-community/slider";
+import BiomarkerCard from "./components/ui/biomarker-card";
+import CommonButton from "./components/ui/common-button";
+import EmotionDropdown from "./components/ui/emotion-dropdown";
+import EmotionInput from "./components/ui/emotion-input";
+import HealthProviderSection from "./components/ui/health-provider";
+import {
+  DEBUG_MODE,
+  EMOTION_OPTIONS,
+  LISTEN_BEFORE_GENERATE_MS,
+  UserInput,
+} from "./constants/appConstants";
+import { buildEmotionPath } from "./services/EmotionPathService";
 import { fetchAppleHealthData, HealthData } from "./services/HealthService";
 import {
   downloadAndSaveAudio,
@@ -27,18 +38,6 @@ import {
   NewsData,
   WeatherData,
 } from "./services/WeatherNewsService";
-import {
-  DEBUG_MODE,
-  EMOTION_OPTIONS,
-  LISTEN_BEFORE_GENERATE_MS,
-  UserInput,
-} from "./constants/appConstants";
-import HealthProviderSection from "./components/ui/health-provider";
-import EmotionInput from "./components/ui/emotion-input";
-import BiomarkerCard from "./components/ui/biomarker-card";
-import { buildEmotionPath } from "./services/EmotionPathService";
-import CommonButton from "./components/ui/common-button";
-import EmotionDropdown from "./components/ui/emotion-dropdown";
 
 export default function App() {
   //console.log("DEBUG ENV: ", process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY);
@@ -315,6 +314,8 @@ export default function App() {
     const currentMood =
       emotionPath?.[currentSongIndex + 1] || input.currentMood;
     console.log("Mood input for next song: ", currentMood);
+    console.log("HR for next song: ", latestHealthData.heartRate);
+    console.log("Steps for next song: ", latestHealthData.steps);
 
     const prompt = `
       You are a creative songwriter. Generate original song lyrics personalized to the following inputs:

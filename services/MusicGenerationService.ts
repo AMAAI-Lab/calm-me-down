@@ -1,19 +1,26 @@
 import { documentDirectory, downloadAsync } from "expo-file-system/legacy";
 import { Alert } from "react-native";
+import { ENV } from "@/config/env";
 
 // --- CONFIGURATION ---
 const CURRENT_LYRICS_PROVIDER: "PERPLEXITY" | "CLAUDE" = "CLAUDE";
 
 // Change this to 'SUNO', 'REPLICATE', or 'MOCK' to switch engines
 const CURRENT_SONG_PROVIDER: "SUNO_ORG" | "SUNO" | "REPLICATE" | "MOCK" =
-  "MOCK";
+  "SUNO_ORG";
 
 // --- API KEYS & CONSTANTS ---
-const CLAUDE_API_KEY = process.env.EXPO_PUBLIC_CLAUDE_API_KEY;
-const PPLX_API_KEY = process.env.EXPO_PUBLIC_PPLX_API_KEY;
-const SUNO_API_KEY = process.env.EXPO_PUBLIC_SUNO_API_KEY;
-const SUNO_ORG_API_KEY = process.env.EXPO_PUBLIC_SUNO_ORG_API_KEY;
-const REPLICATE_API_KEY = process.env.EXPO_PUBLIC_REPLICATE_API_KEY;
+// const CLAUDE_API_KEY = process.env.EXPO_PUBLIC_CLAUDE_API_KEY;
+// const PPLX_API_KEY = process.env.EXPO_PUBLIC_PPLX_API_KEY;
+// const SUNO_API_KEY = process.env.EXPO_PUBLIC_SUNO_API_KEY;
+// const SUNO_ORG_API_KEY = process.env.EXPO_PUBLIC_SUNO_ORG_API_KEY;
+// const REPLICATE_API_KEY = process.env.EXPO_PUBLIC_REPLICATE_API_KEY;
+
+const CLAUDE_API_KEY = ENV.CLAUDE_API_KEY;
+const PPLX_API_KEY = ENV.PPLX_API_KEY;
+const SUNO_API_KEY = ENV.SUNO_API_KEY;
+const SUNO_ORG_API_KEY = ENV.SUNO_ORG_API_KEY;
+const REPLICATE_API_KEY = ENV.REPLICATE_API_KEY;
 
 const SUNO_URL_CREATE = "https://api.musicapi.ai/api/v1/sonic/create";
 const SUNO_URL_TASK = "https://api.musicapi.ai/api/v1/sonic/task";
@@ -194,8 +201,8 @@ async function generateWithSunoOrg(
       callBackUrl: "https://api.example.com/callback",
       // prompt: "A calm and relaxing piano track with soft melodies",
       prompt: lyrics,
-      style: "Classical",
-      title: "Peaceful Piano Meditation",
+      //style: "Classical",
+      title: "Your Personal Playlist",
       personaId: "persona_123",
       negativeTags: "Heavy Metal, Upbeat Drums",
       vocalGender: "m",
@@ -445,7 +452,7 @@ async function continueSunoOrgPolling(taskId: string, mood: string) {
 
       if (validSong) {
         const finalUrl = validSong.audioUrl || validSong.audio_url;
-        console.log("✅ Final Suno Org MP3 Ready:", finalUrl);
+        console.log("Final Suno Org MP3 Ready:", finalUrl);
 
         // Emit event to app layer
         notifyFinalReady(taskId, finalUrl);

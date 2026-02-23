@@ -16,11 +16,12 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "tech.axar.geeta.emotionapp",
+      "bundleIdentifier": "com.sutd.geeta.emotionapp",
       "infoPlist": {
         "NSHealthShareUsageDescription": "This app requires access to your health data to analyze your heart rate and steps.",
         "NSHealthUpdateUsageDescription": "This app writes data to HealthKit.",
-        "NSLocationWhenInUseUsageDescription": "This app uses your location to personalize song lyrics based on where you are."
+        "NSLocationWhenInUseUsageDescription": "This app uses your location to personalize song lyrics based on where you are.",
+        "ITSAppUsesNonExemptEncryption": false
       },
       "entitlements": {
         "com.apple.developer.healthkit": true
@@ -32,8 +33,6 @@
         "backgroundColor": "#ffffff"
       },
       "permissions": [
-        "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
@@ -53,6 +52,12 @@
         }
       ],
       "expo-audio"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "fa4007e9-8faf-4dca-b6d3-5ec925c8515b"
+      }
+    }
   }
 }

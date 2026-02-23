@@ -57,12 +57,12 @@ export async function authorizeAppleHealth(): Promise<boolean> {
 
 // const getLastFiveMinutesISO = () => {
 //   const d = new Date();
-//   d.setMinutes(d.getMinutes() - 5);
+//   d.setMinutes(d.getMinutes() - 360);
 //   return d.toISOString();
 // };
 const getLast30SecondsISO = () => {
   const d = new Date();
-  d.setSeconds(d.getSeconds() - 30);
+  d.setSeconds(d.getSeconds() - 3600); 
   return d.toISOString();
 };
 
@@ -70,45 +70,59 @@ export async function fetchAppleHealthData(): Promise<HealthData> {
   if (Platform.OS !== "ios") return { heartRate: null, steps: null };
 
   const startDate = getLast30SecondsISO();
+  //const startDate = getLastFiveMinutesISO()
   const endDate = new Date().toISOString();
   const options = {
     startDate,
     endDate,
-    limit: 300,
+    //limit: 300,
   };
 
   // Fetch Heart Rate
   const hrPromise = new Promise<number | null>((resolve) => {
     AppleHealthKit.getHeartRateSamples(
-      options,
+      //options,
+      { ...options, limit: 1 }, // Just need the most recent
       (err: string, results: HealthValue[]) => {
-        if (err) resolve(null);
-        else
-          resolve(
-            results.length > 0
-              ? (results[results.length - 1].value as number)
-              : null,
-          );
+        // if (err) resolve(null);
+        // else
+        //   resolve(
+        //     results.length > 0
+        //       ? (results[results.length - 1].value as number)
+        //       : null,
+        //   );
+        if (err || !results.length) resolve(null);
+        else resolve(results[0].value as number);
       },
     );
   });
 
   // Fetch Steps
   const stepsPromise = new Promise<number | null>((resolve) => {
-    AppleHealthKit.getSamples(
-      {
-        ...options,
-        type: "Walking",
-      },
-      (err: string, results: HealthValue[]) => {
-        if (err || !results?.length) {
+    //AppleHealthKit.getSamples(
+    AppleHealthKit.getStepCount(
+      //{
+        //...options,
+        options, // Use getStepCount for a direct daily/period total
+        //type: "Walking",
+      //},
+      // (err: string, results: HealthValue[]) => {
+      //   if (err || !results?.length) {
+      //     resolve(0);
+      //   } else {
+      //     const totalSteps = results.reduce(
+      //       (sum, sample) => sum + (sample?.value || 0),
+      //       0,
+      //     );
+      //     resolve(totalSteps);
+      (err: string, results: HealthValue) => {
+        if (err) {
+          console.error("Step fetch error:", err);
           resolve(0);
         } else {
-          const totalSteps = results.reduce(
-            (sum, sample) => sum + (sample?.value || 0),
-            0,
-          );
-          resolve(totalSteps);
+          // getStepCount returns a single HealthValue object with the sum
+          resolve(results?.value || 0);
+        
         }
       },
     );
