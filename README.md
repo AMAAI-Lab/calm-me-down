@@ -60,3 +60,9 @@ UI/UX: Dark-themed, fully scrollable interface with keyboard avoidance and safe 
 - OPENWEATHER_API_KEY (OpenWeatherMap)
 
 - NEWS_API_KEY (NewsAPI)
+
+## TEST: 
+1. Fill out the particulars in form, magic wont happen unless you fill your details.
+2. Authorise to fetch your health data
+3. Generate lyrics and songs
+4. Sit back and listen to your personalized playlist
