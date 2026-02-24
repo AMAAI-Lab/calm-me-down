@@ -21,6 +21,7 @@ export default {
         NSHealthUpdateUsageDescription: "This app writes data to HealthKit.",
         NSLocationWhenInUseUsageDescription:
           "This app uses your location to personalize song lyrics based on where you are.",
+        "ITSAppUsesNonExemptEncryption": false
       },
       entitlements: {
         "com.apple.developer.healthkit": true,
@@ -68,6 +69,9 @@ export default {
       UDIO_API_KEY: process.env.EXPO_PUBLIC_UDIO_API_KEY,
       REPLILCATE_MODEL_VERSION:
         process.env.EXPO_PUBLIC_REPLILCATE_MODEL_VERSION,
+      "eas": {
+        "projectId": "fa4007e9-8faf-4dca-b6d3-5ec925c8515b"
+      }
     },
   },
 };
