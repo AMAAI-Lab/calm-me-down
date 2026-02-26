@@ -51,6 +51,7 @@ music-api-commands
 
 #ignore bkup files
 *bkup*
+*bk*
 
 #ignore 
 eas.json

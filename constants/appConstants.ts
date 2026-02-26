@@ -56,3 +56,4 @@ export const EMOTION_MAP: EmotionPoint[] = [
 ];
 
 export const EMOTION_OPTIONS = EMOTION_MAP.map((e) => e.emotion).sort();
+export const MAX_LOG_FILE_SIZE = 500_000; // 500KB

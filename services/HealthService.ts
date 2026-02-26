@@ -55,22 +55,22 @@ export async function authorizeAppleHealth(): Promise<boolean> {
   });
 }
 
-// const getLastFiveMinutesISO = () => {
-//   const d = new Date();
-//   d.setMinutes(d.getMinutes() - 360);
-//   return d.toISOString();
-// };
-const getLast30SecondsISO = () => {
+const getLastFiveMinutesISO = () => {
   const d = new Date();
-  d.setSeconds(d.getSeconds() - 3600); 
+  d.setMinutes(d.getMinutes() - 5);
   return d.toISOString();
 };
+// const getLast30SecondsISO = () => {
+//   const d = new Date();
+//   d.setSeconds(d.getSeconds() - 3600); 
+//   return d.toISOString();
+// };
 
 export async function fetchAppleHealthData(): Promise<HealthData> {
   if (Platform.OS !== "ios") return { heartRate: null, steps: null };
 
-  const startDate = getLast30SecondsISO();
-  //const startDate = getLastFiveMinutesISO()
+  //const startDate = getLast30SecondsISO();
+  const startDate = getLastFiveMinutesISO()
   const endDate = new Date().toISOString();
   const options = {
     startDate,
@@ -82,7 +82,8 @@ export async function fetchAppleHealthData(): Promise<HealthData> {
   const hrPromise = new Promise<number | null>((resolve) => {
     AppleHealthKit.getHeartRateSamples(
       //options,
-      { ...options, limit: 1 }, // Just need the most recent
+      //{ ...options, limit: 1 }, // Just need the most recent
+      {startDate, endDate},
       (err: string, results: HealthValue[]) => {
         // if (err) resolve(null);
         // else
@@ -91,40 +92,67 @@ export async function fetchAppleHealthData(): Promise<HealthData> {
         //       ? (results[results.length - 1].value as number)
         //       : null,
         //   );
-        if (err || !results.length) resolve(null);
-        else resolve(results[0].value as number);
+        if (err || !results.length) {
+          console.error ("HR NULL");
+          resolve(null);
+        }
+        else {
+          console.log("Fetching HR - ");
+          //console.log("All samples for HR: ", JSON.stringify(results, null, 2));
+          console.log(`HR: ${results.length} samples in last 30 min`);
+          results.forEach((r,i) => {
+            console.log (` [${i}] ${r.value} bpm at ${r.startDate}`);
+          })
+          const avg = results.reduce((sum,r)=> sum + r.value, 0)/ results.length;
+          //resolve(results[0].value as number);
+          resolve(Math.round(avg));
+        }
       },
     );
   });
 
   // Fetch Steps
   const stepsPromise = new Promise<number | null>((resolve) => {
-    //AppleHealthKit.getSamples(
-    AppleHealthKit.getStepCount(
+    AppleHealthKit.getSamples(
+    //AppleHealthKit.getStepCount(
       //{
         //...options,
-        options, // Use getStepCount for a direct daily/period total
+        //options, // Use getStepCount for a direct daily/period total
         //type: "Walking",
       //},
-      // (err: string, results: HealthValue[]) => {
-      //   if (err || !results?.length) {
-      //     resolve(0);
-      //   } else {
-      //     const totalSteps = results.reduce(
-      //       (sum, sample) => sum + (sample?.value || 0),
-      //       0,
-      //     );
-      //     resolve(totalSteps);
-      (err: string, results: HealthValue) => {
-        if (err) {
-          console.error("Step fetch error:", err);
+      {
+        startDate,
+        endDate,
+        type: "StepCount",
+      },
+      (err: string, results: HealthValue[]) => {
+        //console.log("All samples for Steps: ", JSON.stringify(results,null,2));
+
+        if (err || !results?.length) {
+          console.error ("Error fetching steps");
           resolve(0);
         } else {
-          // getStepCount returns a single HealthValue object with the sum
-          resolve(results?.value || 0);
-        
+          console.log("Fetching steps - ");
+          const totalSteps = results.reduce(
+            //(sum, sample) => sum + (sample?.value || 0),
+            (sum,sample :any) => sum + (sample?.quantity || sample?.value || 0),
+            0,
+          );
+          console.log(`Total steps in last 30 min: ${totalSteps}`);
+          resolve(totalSteps);
         }
       },
+      
+      // (err: string, results: HealthValue) => {
+      //   if (err) {
+      //     console.error("Step fetch error:", err);
+      //     resolve(0);
+      //   } else {
+      //     // getStepCount returns a single HealthValue object with the sum
+      //     resolve(results?.value || 0);
+        
+      //   }
+      // },
     );
   });
 
