@@ -23,7 +23,12 @@ import {
   LISTEN_BEFORE_GENERATE_MS,
   UserInput,
 } from "./constants/appConstants";
-import { buildEmotionPath } from "./services/EmotionPathService";
+import {
+  buildEmotionPath,
+  buildVAPath,
+  getAdaptationStrategy,
+  getBiometricAdjustedEmotion,
+} from "./services/EmotionPathService";
 import { fetchAppleHealthData, HealthData } from "./services/HealthService";
 import {
   downloadAndSaveAudio,
@@ -40,7 +45,6 @@ import {
 } from "./services/WeatherNewsService";
 
 export default function App() {
-  //console.log("DEBUG ENV: ", process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY);
   const [input, setInput] = useState<UserInput>({
     name: "",
     age: "",
@@ -59,11 +63,8 @@ export default function App() {
   const [newsData, setNewsData] = useState<NewsData | null>(null);
 
   const [generatingLyrics, setGeneratingLyrics] = useState(false);
-
   const [generatingSong, setGeneratingSong] = useState(false);
-
   const [lyricPrompt, setLyricPrompt] = useState("");
-
   const [generatedLyrics, setGeneratedLyrics] = useState("");
 
   const [emotionPath, setEmotionPath] = useState<string[]>([]);
@@ -75,6 +76,25 @@ export default function App() {
   const [downloadedAudios, setDownloadedAudios] = useState<
     Record<number, string>
   >({});
+
+  // --- NEW: VA trajectory and biometric state ---
+  const [vaPath, setVaPath] = useState<
+    { valence: number; arousal: number }[]
+  >([]);
+  const [bioLog, setBioLog] = useState<
+    {
+      songIndex: number;
+      planned: { valence: number; arousal: number };
+      adjusted: { valence: number; arousal: number; emotion: string };
+      bioArousal: number | null;
+      deviation: number;
+      strategy: string;
+      hr: number | null;
+      steps: number | null;
+      hrv: number | null;
+      timestamp: string;
+    }[]
+  >([]);
 
   const currentSong = songQueue[currentSongIndex] ?? null;
   const player = useAudioPlayer(currentSong?.audioUrl || "");
@@ -101,14 +121,12 @@ export default function App() {
 
       console.log("location set");
 
-      // Fetch weather and news data based on location
       const weather = await fetchWeatherData(
         loc.coords.latitude,
         loc.coords.longitude,
       );
       setWeatherData(weather);
 
-      // Using US as default country code for news; can be enhanced to use location data
       const news = await fetchNewsData("us");
       setNewsData(news);
     })();
@@ -119,58 +137,68 @@ export default function App() {
       console.warn(`Missing form data!`);
       return;
     }
-    //const prompt = `Create song lyrics for: ${input.name}, Mood: ${input.currentMood} -> ${input.desiredMood}. Health: HR ${healthData.heartRate}, Steps ${healthData.steps}.`;
 
+    // Build both the named emotion path and the VA trajectory
     const emotionTrajectory = buildEmotionPath(
       input.currentMood,
       input.desiredMood,
     );
-    console.log("fetched emotion Trajectory: ", emotionTrajectory);
-    // MUSIC TASTE: ${input.favoriteGenre} (Style of ${input.favoriteBand}).
+    const vaTrajectory = buildVAPath(input.currentMood, input.desiredMood);
+
+    console.log("Emotion Trajectory:", emotionTrajectory);
+    console.log("VA Trajectory:", vaTrajectory);
+
     setEmotionPath(emotionTrajectory);
+    setVaPath(vaTrajectory);
+    setBioLog([]); // Reset bio log for new session
 
-    const prompt = `
-      You are a creative songwriter. Generate original song lyrics personalized to the following inputs:
+    // Get biometric-adjusted emotion for the first song
+    const adjustedEmotion = getBiometricAdjustedEmotion(
+      vaTrajectory,
+      0,
+      healthData.arousal,
+    );
 
-      USER
-      - Name: ${input.name}
-      - Age: ${input.age}
+    const strategy = getAdaptationStrategy(
+      adjustedEmotion.deviation,
+      vaTrajectory[0]?.arousal ?? 0.5,
+      healthData.arousal,
+    );
 
-      MUSIC STYLE
-      - Genre preference: ${input.favoriteGenre}
-      - Stylistic influence (do NOT imitate or quote): ${input.favoriteBand}
-      - mood: ${emotionTrajectory[0]}
+    console.log(
+      `Song 0 → Planned: ${emotionTrajectory[0]}, Adjusted: ${adjustedEmotion.emotion} ` +
+        `(V:${adjustedEmotion.valence}, A:${adjustedEmotion.arousal}), ` +
+        `Deviation: ${adjustedEmotion.deviation}, Strategy: ${strategy}`
+    );
 
-      PHYSICAL CONTEXT
-      - Heart rate: ${healthData.heartRate} bpm
-      - Daily activity: ${healthData.steps} steps
-      - Current or upcoming activity: ${input.activity || "None specified"}
-
-      ENVIRONMENT
-      - Location: ${weatherData?.city || "Unknown"}
-      - Weather: ${weatherData?.temperature ? `${weatherData.temperature}°C, ${weatherData.description}` : "Unknown"}
-      - News mood cue (optional): ${newsData?.headline || "N/A"}
-
-      TASK:
-      Write cohesive song lyrics.
-      1. Structure: Verse 1, Chorus, Verse 2, Chorus (exact repeat), and Outro.
-      2. Tone: motivational, uplifting, and emotionally grounded.
-      3. Length: Target ~180–220 words total.
-      4. Integration: Integrate physical state, environment, and (if relevant) the news mood subtly and metaphorically
-      5. Originality: Avoid clichés and generic motivational phrases.
-      6. Style: Use the genre and stylistic influence only for rhythm, imagery, and tone guidance—do not imitate or quote them.
-
-      OUTPUT FORMAT (STRICT):
-      Return ONLY valid JSON. No preamble or markdown. Use the following structure:
+    // Log biometric state for this song
+    setBioLog((prev) => [
+      ...prev,
       {
-        "lyrics": {
-          "verse1": "...",
-          "chorus": "...",
-          "verse2": "...",
-          "outro": "..."
-        }
-      }
-    `;
+        songIndex: 0,
+        planned: vaTrajectory[0],
+        adjusted: adjustedEmotion,
+        bioArousal: healthData.arousal,
+        deviation: adjustedEmotion.deviation,
+        strategy,
+        hr: healthData.heartRate,
+        steps: healthData.steps,
+        hrv: healthData.hrv,
+        timestamp: new Date().toISOString(),
+      },
+    ]);
+
+    // Build the prompt with biometric context
+    const prompt = buildLyricPrompt({
+      input,
+      mood: adjustedEmotion.emotion,
+      valence: adjustedEmotion.valence,
+      arousal: adjustedEmotion.arousal,
+      healthData,
+      weatherData,
+      newsData,
+      strategy,
+    });
 
     setLyricPrompt(prompt);
     setGeneratingLyrics(true);
@@ -180,19 +208,15 @@ export default function App() {
     if (DEBUG_MODE) {
       console.log("DEBUG MODE: Generating mock lyrics and song...");
 
-      // Mock Latency
       setTimeout(async () => {
-        // 1. Mock Lyrics
         const mockLyrics = `(Mock Lyrics for ${input.name})\n\nIn the city of ${weatherData?.city || "Dreams"},\nHeart beating at ${healthData.heartRate || "steady"} pace,\nWalking through the ${weatherData?.description || "mist"},\nFinding my own space.\n\nFrom ${input.currentMood} shadows,\nTo ${input.desiredMood} light,\nThis song guides me,\nThrough the day and night.`;
         setGeneratedLyrics(mockLyrics);
         setGeneratingLyrics(false);
 
-        // 2. Mock Song (Immediately after)
         setGeneratingSong(true);
         setTimeout(() => {
           const mockSongData: GeneratedSong = {
             audioUrl:
-              // "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", // Public domain MP3
               "https://wephotos1.s3.amazonaws.com/bCv0l1ycm2Ac.mp3",
             title: `Song for ${input.name}`,
             duration: 30,
@@ -201,8 +225,8 @@ export default function App() {
           setSongQueue([mockSongData]);
           setCurrentSongIndex(0);
           setGeneratingSong(false);
-        }, 1500); // 1.5s delay for song generation simulation
-      }, 1000); // 1s delay for lyrics simulation
+        }, 1500);
+      }, 1000);
 
       return;
     }
@@ -235,7 +259,7 @@ export default function App() {
       const generatedSong = await generateSong(
         currentLyrics || "Uplifting song",
         input.favoriteGenre,
-        input.desiredMood,
+        adjustedEmotion.emotion,
         currentSongIndex,
       );
       if (generatedSong) {
@@ -259,7 +283,6 @@ export default function App() {
     } else {
       player.play();
     }
-    //if song is finished, play from beginning TODO
   };
 
   const handlePrevSong = () => {
@@ -289,76 +312,83 @@ export default function App() {
       setDownloadedAudios((prev) => ({ ...prev, [index]: "" }));
     });
 
-    // Auto playing song when previous or next button is pressed
     if (!currentSong) return;
     player.play();
   }, [currentSong?.audioUrl]);
 
   useEffect(() => {
     if (playerStatus.didJustFinish) {
-      //Song ended, auto-playing next
       handleNextSong();
     }
   }, [playerStatus.playing]);
 
+  // --- UPDATED: generateNextSong now uses biometric fusion ---
   const generateNextSong = async () => {
     if (
       songQueue.length > currentSongIndex + 1 ||
-      emotionPath.length < currentSongIndex
+      //emotionPath.length < currentSongIndex
+      currentSongIndex + 1 >= vaPath.length // songs generated were more than trajectory length
     ) {
+      console.log("Trajectory complete, no more songs to generate");
       return;
     }
 
-    const latestHealthData = await fetchAppleHealthData();
+    // Fetch fresh biometric data
+    const latestHealthData = await fetchAppleHealthData(10);
 
-    const currentMood =
-      emotionPath?.[currentSongIndex + 1] || input.currentMood;
-    console.log("Mood input for next song: ", currentMood);
-    console.log("HR for next song: ", latestHealthData.heartRate);
-    console.log("Steps for next song: ", latestHealthData.steps);
+    // Get biometric-adjusted emotion for the next song
+    const nextIndex = currentSongIndex + 1;
+    const adjustedEmotion = getBiometricAdjustedEmotion(
+      vaPath,
+      nextIndex,
+      latestHealthData.arousal,
+    );
 
-    const prompt = `
-      You are a creative songwriter. Generate original song lyrics personalized to the following inputs:
+    const plannedVA = vaPath[Math.min(nextIndex, vaPath.length - 1)];
+    const strategy = getAdaptationStrategy(
+      adjustedEmotion.deviation,
+      plannedVA?.arousal ?? 0.5,
+      latestHealthData.arousal,
+    );
 
-      USER
-      - Name: ${input.name}
-      - Age: ${input.age}
+    console.log(
+      `Song ${nextIndex} → Planned mood: ${emotionPath?.[nextIndex] || "N/A"}, ` +
+        `Adjusted: ${adjustedEmotion.emotion} (V:${adjustedEmotion.valence}, A:${adjustedEmotion.arousal}), ` +
+        `Bio arousal: ${latestHealthData.arousal}, Deviation: ${adjustedEmotion.deviation}, ` +
+        `Strategy: ${strategy}`
+    );
+    console.log(
+      `  HR: ${latestHealthData.heartRate}, Steps: ${latestHealthData.steps}, HRV: ${latestHealthData.hrv}`
+    );
 
-      MUSIC STYLE
-      - Genre preference: ${input.favoriteGenre}
-      - Stylistic influence (do NOT imitate or quote): ${input.favoriteBand}
-      - mood: ${currentMood}
-
-      PHYSICAL CONTEXT
-      - Heart rate: ${latestHealthData.heartRate} bpm
-      - Daily activity: ${latestHealthData.steps} steps
-      - Current or upcoming activity: ${input.activity || "None specified"}
-
-      ENVIRONMENT
-      - Location: ${weatherData?.city || "Unknown"}
-      - Weather: ${weatherData?.temperature ? `${weatherData.temperature}°C, ${weatherData.description}` : "Unknown"}
-      - News mood cue (optional): ${newsData?.headline || "N/A"}
-
-      TASK:
-      Write cohesive song lyrics.
-      1. Structure: Verse 1, Chorus, Verse 2, Chorus (exact repeat), and Outro.
-      2. Tone: motivational, uplifting, and emotionally grounded.
-      3. Length: Target ~180-220 words total.
-      4. Integration: Integrate physical state, environment, and (if relevant) the news mood subtly and metaphorically
-      5. Originality: Avoid clichés and generic motivational phrases.
-      6. Style: Use the genre and stylistic influence only for rhythm, imagery, and tone guidance—do not imitate or quote them.
-
-      OUTPUT FORMAT (STRICT):
-      Return ONLY valid JSON. No preamble or markdown. Use the following structure:
+    // Log biometric state
+    setBioLog((prev) => [
+      ...prev,
       {
-        "lyrics": {
-          "verse1": "...",
-          "chorus": "...",
-          "verse2": "...",
-          "outro": "..."
-        }
-      }
-    `;
+        songIndex: nextIndex,
+        planned: plannedVA,
+        adjusted: adjustedEmotion,
+        bioArousal: latestHealthData.arousal,
+        deviation: adjustedEmotion.deviation,
+        strategy,
+        hr: latestHealthData.heartRate,
+        steps: latestHealthData.steps,
+        hrv: latestHealthData.hrv,
+        timestamp: new Date().toISOString(),
+      },
+    ]);
+
+    // Build prompt with biometric-adjusted mood
+    const prompt = buildLyricPrompt({
+      input,
+      mood: adjustedEmotion.emotion,
+      valence: adjustedEmotion.valence,
+      arousal: adjustedEmotion.arousal,
+      healthData: latestHealthData,
+      weatherData,
+      newsData,
+      strategy,
+    });
 
     if (DEBUG_MODE) {
       console.log("DEBUG MODE: Generating mock lyrics and next song...");
@@ -366,7 +396,7 @@ export default function App() {
       setTimeout(async () => {
         const nextSongIdx = ((currentSongIndex + 1) % 15) + 1;
         const mockSongData: GeneratedSong = {
-          audioUrl: `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-${nextSongIdx}.mp3`, // Public domain MP3
+          audioUrl: `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-${nextSongIdx}.mp3`,
           title: `Song for ${input?.name || "N/A"}`,
           duration: 30,
           provider: "MOCK",
@@ -402,7 +432,7 @@ export default function App() {
       const generatedSong = await generateSong(
         currentLyrics || "Uplifting song",
         input?.favoriteGenre || "N/A",
-        input?.desiredMood || "N/A",
+        adjustedEmotion.emotion,
         currentSongIndex + 1,
       );
       if (generatedSong) {
@@ -433,7 +463,8 @@ export default function App() {
     ) {
       return;
     }
-    if (emotionPath.length < currentSongIndex) {
+    //if (emotionPath.length < currentSongIndex) {
+    if (currentSongIndex + 1 >= vaPath.length) {
       console.warn(
         "Could not generate next song as songs generation completed for all the emotions in the path!",
       );
@@ -515,12 +546,11 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
-        {/* Removed the intermediate View causing layout issues */}
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={true} // Helpful for debugging scrolling
+          showsVerticalScrollIndicator={true}
           onContentSizeChange={(w, h) => console.log("Content height:", h)}
           scrollEnabled={!isDropdownOpen}
           nestedScrollEnabled={true}
@@ -541,20 +571,6 @@ export default function App() {
             value={input.age}
             onChange={(t) => handleInputChange("age", t)}
           />
-          {/* <EmotionInput
-            label="How are you feeling?"
-            placeholder="Sad, Calm, Mysterious, Tense..."
-            icon={<FontAwesome5 name="microphone" size={16} color="#fff" />}
-            value={input.currentMood}
-            onChange={(t) => handleInputChange("currentMood", t)}
-          />
-          <EmotionInput
-            label="How would you like to feel?"
-            placeholder="Joyful, Excited, Cheerful, Energetic..."
-            icon={<FontAwesome5 name="bolt" size={16} color="#fff" />}
-            value={input.desiredMood}
-            onChange={(t) => handleInputChange("desiredMood", t)}
-          /> */}
           <EmotionDropdown
             label="How are you feeling?"
             placeholder="Sad, Calm, Mysterious, Tense..."
@@ -571,24 +587,6 @@ export default function App() {
             icon={<FontAwesome5 name="bolt" size={16} color="#fff" />}
             onChange={(t) => handleInputChange("desiredMood", t)}
           />
-          {/* <SearchableDropdown
-            label="How are you feeling?"
-            value={input.currentMood}
-            options={EMOTION_OPTIONS}
-            placeholder="Sad, Calm, Mysterious, Tense..."
-            onSelect={(t) => handleInputChange("currentMood", t)}
-            onOpen={() => setIsDropdownOpen(true)}
-            onClose={() => setIsDropdownOpen(false)}
-          />
-          <SearchableDropdown
-            label="How would you like to feel?"
-            value={input.desiredMood}
-            options={EMOTION_OPTIONS}
-            placeholder="Joyful, Excited, Cheerful, Energetic..."
-            onSelect={(t) => handleInputChange("desiredMood", t)}
-            onOpen={() => setIsDropdownOpen(true)}
-            onClose={() => setIsDropdownOpen(false)}
-          /> */}
           <EmotionInput
             label="Favorite genre"
             placeholder="Pop, Rock, Indie, EDM..."
@@ -629,7 +627,28 @@ export default function App() {
               label="Steps"
               value={`${healthData?.steps || "--"}`}
             />
-
+            <BiomarkerCard
+              icon={
+                <FontAwesome5
+                  name="heartbeat"
+                  size={20}
+                  color="#b36cff"
+                />
+              }
+              label="HRV"
+              value={`${healthData?.hrv ?? "--"} ms`}
+            />
+            <BiomarkerCard
+              icon={
+                <FontAwesome5 name="brain" size={20} color="#b36cff" />
+              }
+              label="Arousal"
+              value={
+                healthData?.arousal !== null && healthData?.arousal !== undefined
+                  ? `${(healthData.arousal * 100).toFixed(0)}%`
+                  : "--"
+              }
+            />
             <BiomarkerCard
               icon={
                 <FontAwesome5
@@ -664,7 +683,7 @@ export default function App() {
             </Pressable>
           )}
 
-          {/* Display  lyrics and Audio Player */}
+          {/* Display lyrics and Audio Player */}
           {generatedLyrics.length > 0 && (
             <View style={styles.stepContainer}>
               <Text style={styles.lyricsTitle}>Your Song</Text>
@@ -767,9 +786,6 @@ export default function App() {
           </View>
           {songQueue?.length ? (
             <View style={{ marginTop: 20, opacity: 0.5 }}>
-              {/* <Text style={{ color: "#ece5e5", fontSize: 12 }}>
-                Current duration: {player.currentTime}
-              </Text> */}
               <Text style={{ color: "#ece5e5", fontSize: 12 }}>
                 Current music number: {currentSongIndex + 1}
               </Text>
@@ -789,7 +805,43 @@ export default function App() {
               </Text>
             </View>
           ) : null}
-          {/*Debug Prompt Display*/}
+
+          {/* NEW: VA Trajectory Debug */}
+          {vaPath?.length ? (
+            <View style={{ marginTop: 10, opacity: 0.5 }}>
+              <Text style={{ color: "#ece5e5", fontSize: 12 }}>
+                VA Trajectory:
+              </Text>
+              {vaPath.map((p, i) => (
+                <Text key={i} style={{ color: "#ccc", fontSize: 11 }}>
+                  [{i}] V:{p.valence} A:{p.arousal}
+                </Text>
+              ))}
+            </View>
+          ) : null}
+
+          {/* NEW: Biometric Fusion Log */}
+          {bioLog?.length ? (
+            <View style={{ marginTop: 10, opacity: 0.5 }}>
+              <Text style={{ color: "#ece5e5", fontSize: 12 }}>
+                Biometric Fusion Log:
+              </Text>
+              {bioLog.map((entry, i) => (
+                <View key={i} style={{ marginTop: 4 }}>
+                  <Text style={{ color: "#ccc", fontSize: 11 }}>
+                    Song {entry.songIndex}: {entry.adjusted.emotion} (V:
+                    {entry.adjusted.valence} A:{entry.adjusted.arousal})
+                  </Text>
+                  <Text style={{ color: "#999", fontSize: 10 }}>
+                    HR:{entry.hr ?? "--"} Steps:{entry.steps ?? "--"} HRV:
+                    {entry.hrv ?? "--"} BioA:{entry.bioArousal ?? "--"} Dev:
+                    {entry.deviation} → {entry.strategy}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
           {generatedLyrics && lyricPrompt ? (
             <View style={{ marginTop: 20, opacity: 0.5 }}>
               <Text style={{ color: "#ece5e5", fontSize: 12 }}>
@@ -804,10 +856,93 @@ export default function App() {
   );
 }
 
+// --- HELPER: Build lyric prompt with biometric context ---
+function buildLyricPrompt({
+  input,
+  mood,
+  valence,
+  arousal,
+  healthData,
+  weatherData,
+  newsData,
+  strategy,
+}: {
+  input: UserInput;
+  mood: string;
+  valence: number;
+  arousal: number;
+  healthData: HealthData;
+  weatherData: WeatherData | null;
+  newsData: NewsData | null;
+  strategy: string;
+}): string {
+  // Map strategy to musical guidance
+  const strategyGuidance: Record<string, string> = {
+    on_track: "The listener is responding well. Continue the current emotional trajectory.",
+    slow_down:
+      "The listener's arousal is higher than expected (possibly stressed/anxious). " +
+      "Use slower tempo, softer instrumentation, and more calming imagery to help them relax.",
+    intensify:
+      "The listener is calmer than expected. " +
+      "Slightly increase energy with more rhythmic elements and uplifting imagery.",
+    hold_steady:
+      "Maintain the current energy level. The listener is in a transitional state.",
+  };
+
+  return `
+    You are a creative songwriter. Generate original song lyrics personalized to the following inputs:
+
+    USER
+    - Name: ${input.name}
+    - Age: ${input.age}
+
+    MUSIC STYLE
+    - Genre preference: ${input.favoriteGenre}
+    - Stylistic influence (do NOT imitate or quote): ${input.favoriteBand}
+    - Target mood: ${mood}
+    - Emotional coordinates: Valence ${valence} (${valence > 0 ? "positive" : "negative"}), Arousal ${arousal} (${arousal > 0.5 ? "high energy" : "low energy"})
+
+    PHYSICAL CONTEXT
+    - Heart rate: ${healthData.heartRate ?? "N/A"} bpm
+    - Recent activity: ${healthData.steps ?? "N/A"} steps (last 10 min)
+    - HRV: ${healthData.hrv ?? "N/A"} ms
+    - Estimated emotional arousal: ${healthData.arousal !== null ? (healthData.arousal * 100).toFixed(0) + "%" : "N/A"}
+    - Current or upcoming activity: ${input.activity || "None specified"}
+
+    BIOMETRIC ADAPTATION
+    ${strategyGuidance[strategy] || strategyGuidance.on_track}
+
+    ENVIRONMENT
+    - Location: ${weatherData?.city || "Unknown"}
+    - Weather: ${weatherData?.temperature ? `${weatherData.temperature}°C, ${weatherData.description}` : "Unknown"}
+    - News mood cue (optional): ${newsData?.headline || "N/A"}
+
+    TASK:
+    Write cohesive song lyrics.
+    1. Structure: Verse 1, Chorus, Verse 2, Chorus (exact repeat), and Outro.
+    2. Tone: Match the target mood and emotional coordinates above.
+    3. Length: Target ~180–220 words total.
+    4. Integration: Integrate physical state, environment, and biometric adaptation guidance subtly and metaphorically.
+    5. Originality: Avoid clichés and generic motivational phrases.
+    6. Style: Use the genre and stylistic influence only for rhythm, imagery, and tone guidance—do not imitate or quote them.
+
+    OUTPUT FORMAT (STRICT):
+    Return ONLY valid JSON. No preamble or markdown. Use the following structure:
+    {
+      "lyrics": {
+        "verse1": "...",
+        "chorus": "...",
+        "verse2": "...",
+        "outro": "..."
+      }
+    }
+  `;
+}
+
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#171A1F" },
-  scrollView: { flex: 1 }, // Ensure ScrollView takes available space
-  scrollContent: { padding: 20, paddingBottom: 150 }, // Ensure content grows to fill and adds bottom padding
+  scrollView: { flex: 1 },
+  scrollContent: { padding: 20, paddingBottom: 150 },
   header: {
     fontSize: 24,
     fontWeight: "bold",
