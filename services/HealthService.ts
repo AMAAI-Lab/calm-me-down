@@ -1,4 +1,10 @@
-import * as Location from "expo-location";
+import {
+  EmotionPoint,
+  HeartRateSample,
+  HRV_APP_VERSION,
+  HRV_DURATION_MINS,
+} from "@/constants/appConstants";
+import { LocationObject } from "expo-location";
 import { NativeModules, Platform } from "react-native";
 import BrokenHealthKit, {
   HealthKitPermissions,
@@ -32,24 +38,14 @@ const permissions: HealthKitPermissions = {
   },
 } as HealthKitPermissions;
 
-// --- 3. TYPES ---
+// --- 3. Types
 export type HealthData = {
   heartRate: number | null;
   heartRateSamples: HeartRateSample[];
   steps: number | null;
   hrv: number | null;
   arousal: number | null;
-  location?: Location.LocationObject | null;
-};
-
-export type HeartRateSample = {
-  value: number;
-  timestamp: string;
-};
-
-export type EmotionPoint = {
-  valence: number; // -1 (negative) to 1 (positive)
-  arousal: number; // 0 (calm) to 1 (excited)
+  location?: LocationObject | null;
 };
 
 // --- 4. AUTHORIZATION ---
@@ -98,7 +94,7 @@ export function estimateArousal(
   hr: number | null,
   steps: number | null,
   hrv: number | null = null,
-  restingHR: number = 70
+  restingHR: number = 70,
 ): number | null {
   if (hr === null) return null;
 
@@ -142,7 +138,7 @@ export function computeLiveVA(
   currentEmotion: EmotionPoint,
   targetEmotion: EmotionPoint,
   bioArousal: number | null,
-  progress: number // 0 to 1
+  progress: number, // 0 to 1
 ): EmotionPoint {
   // Valence: interpolate between reported current → target
   const valence =
@@ -164,6 +160,7 @@ export function computeLiveVA(
   }
 
   return {
+    emotion: "",
     valence: Math.round(valence * 100) / 100,
     arousal: Math.round(Math.min(1, Math.max(0, arousal)) * 100) / 100,
   };
@@ -178,7 +175,7 @@ export function computeLiveVA(
  */
 export function getTrajectoryDeviation(
   expectedArousal: number,
-  bioArousal: number | null
+  bioArousal: number | null,
 ): number {
   if (bioArousal === null) return 0;
   return Math.abs(expectedArousal - bioArousal);
@@ -186,7 +183,7 @@ export function getTrajectoryDeviation(
 
 // --- 8. FETCH APPLE HEALTH DATA ---
 export async function fetchAppleHealthData(
-  windowMinutes: number = 10
+  windowMinutes: number = 10,
 ): Promise<HealthData> {
   if (Platform.OS !== "ios") {
     return {
@@ -213,21 +210,25 @@ export async function fetchAppleHealthData(
           console.error("HR NULL");
           resolve({ avg: null, samples: [] });
         } else {
-          console.log(`HR: ${results.length} samples in last ${windowMinutes} min`);
+          console.log(
+            `HR: ${results.length} samples in last ${windowMinutes} min`,
+          );
           results.forEach((r, i) => {
             console.log(` [${i}] ${r.value} bpm at ${r.startDate}`);
           });
 
           const avg =
             results.reduce((sum, r) => sum + r.value, 0) / results.length;
-          const samples = results.map((r) => ({
-            value: r.value,
-            timestamp: r.startDate,
-          }));
+          const samples = !HRV_APP_VERSION
+            ? []
+            : results.map((r) => ({
+                value: r.value,
+                timestamp: r.startDate,
+              }));
 
           resolve({ avg: Math.round(avg), samples });
         }
-      }
+      },
     );
   });
 
@@ -240,46 +241,51 @@ export async function fetchAppleHealthData(
         type: "StepCount",
       },
       (err: string, results: HealthValue[]) => {
+        console.log("All samples for Steps: ", JSON.stringify(results,null,2));
         if (err || !results?.length) {
           console.error("Error fetching steps");
           resolve(0);
         } else {
+          console.log("Fetching steps - ")
           const totalSteps = results.reduce(
             (sum, sample: any) =>
               sum + (sample?.quantity || sample?.value || 0),
-            0
+            0,
           );
           console.log(
-            `Total steps in last ${windowMinutes} min: ${totalSteps}`
+            `Total steps in last ${windowMinutes} min: ${totalSteps}`,
           );
           resolve(totalSteps);
         }
-      }
+      },
     );
   });
 
   // Fetch HRV (Heart Rate Variability)
   const hrvPromise = new Promise<number | null>((resolve) => {
-    const hrvStartDate = getMinutesAgoISO(1440); //24 hours
+    if (!HRV_APP_VERSION) {
+      resolve(null);
+      return;
+    }
+
+    const hrvStartDate = getMinutesAgoISO(HRV_DURATION_MINS);
     try {
-      
       AppleHealthKit.getHeartRateVariabilitySamples(
-        { startDate : hrvStartDate, endDate },
+        { startDate: hrvStartDate, endDate },
         (err: string, results: HealthValue[]) => {
-          
-          console.log("HRV raw results: ", JSON.stringify(results,null,2));
-          
+          //console.log("HRV raw results: ", JSON.stringify(results, null, 2));
+
           if (err || !results?.length) {
             console.log("HRV: no samples available");
             resolve(null);
           } else {
             // HRV is in ms (SDNN). Return the most recent sample.
             const latest = results[results.length - 1];
-            const hrvMs = Math.round(latest.value *1000); //convert seconds to ms
+            const hrvMs = Math.round(latest.value * 1000); //convert seconds to ms
             console.log(`HRV: ${hrvMs} ms at ${latest.startDate}`);
             resolve(hrvMs);
           }
-        }
+        },
       );
     } catch (e) {
       // getHeartRateVariabilitySamples may not be available in all versions
@@ -297,7 +303,7 @@ export async function fetchAppleHealthData(
   const arousal = estimateArousal(hrResult.avg, steps, hrv);
 
   console.log(
-    `Biometrics → HR: ${hrResult.avg}, Steps: ${steps}, HRV: ${hrv}, Arousal: ${arousal}`
+    `Biometrics → HR: ${hrResult.avg}, Steps: ${steps}, HRV: ${hrv}, Arousal: ${arousal}`,
   );
 
   return {

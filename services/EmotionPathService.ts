@@ -6,10 +6,7 @@ const getEmotionPoint = (emotion: string) =>
 /**
  * Find the closest named emotion to a given VA coordinate.
  */
-const findClosestEmotion = (
-  valence: number,
-  arousal: number
-): EmotionPoint => {
+const findClosestEmotion = (valence: number, arousal: number): EmotionPoint => {
   return EMOTION_MAP.reduce((prev, curr) => {
     const prevDist =
       Math.abs(prev.valence - valence) + Math.abs(prev.arousal - arousal);
@@ -26,7 +23,7 @@ const findClosestEmotion = (
 export const buildEmotionPath = (
   startEmotion: string,
   endEmotion: string,
-  steps = 5
+  steps = 5,
 ): string[] => {
   const start = getEmotionPoint(startEmotion);
   const end = getEmotionPoint(endEmotion);
@@ -35,16 +32,19 @@ export const buildEmotionPath = (
     return [startEmotion, endEmotion];
   }
 
-  const trajectory: { valence: number; arousal: number }[] = [];
+  const trajectory: EmotionPoint[] = [];
 
   for (let i = 0; i <= steps + 1; i++) {
     const t = i / (steps + 1);
+
     trajectory.push({
+      emotion: "",
       valence: start.valence + t * (end.valence - start.valence),
       arousal: start.arousal + t * (end.arousal - start.arousal),
     });
   }
 
+  // Match interpolated points to closest known emotions
   return trajectory
     .map((point) => findClosestEmotion(point.valence, point.arousal).emotion)
     .filter((v, i, arr) => arr.indexOf(v) === i);
@@ -57,7 +57,7 @@ export const buildEmotionPath = (
 export const buildVAPath = (
   startEmotion: string,
   endEmotion: string,
-  steps = 5
+  steps = 5,
 ): { valence: number; arousal: number }[] => {
   const start = getEmotionPoint(startEmotion);
   const end = getEmotionPoint(endEmotion);
@@ -75,13 +75,11 @@ export const buildVAPath = (
     const t = i / (steps + 1);
     trajectory.push({
       valence:
-        Math.round(
-          (start.valence + t * (end.valence - start.valence)) * 100
-        ) / 100,
+        Math.round((start.valence + t * (end.valence - start.valence)) * 100) /
+        100,
       arousal:
-        Math.round(
-          (start.arousal + t * (end.arousal - start.arousal)) * 100
-        ) / 100,
+        Math.round((start.arousal + t * (end.arousal - start.arousal)) * 100) /
+        100,
     });
   }
 
@@ -105,7 +103,7 @@ export const getBiometricAdjustedEmotion = (
   vaPath: { valence: number; arousal: number }[],
   songIndex: number,
   bioArousal: number | null,
-  bioWeight: number = 0.6
+  bioWeight: number = 0.6,
 ): {
   valence: number;
   arousal: number;
@@ -122,10 +120,12 @@ export const getBiometricAdjustedEmotion = (
   if (bioArousal !== null) {
     // Blend: bioWeight of live signal, (1 - bioWeight) of planned trajectory
     //Normalize from scores of 1-10 to 0-1
-    const plannedNormalized = planned.arousal/10;
+    const plannedNormalized = planned.arousal / 10;
 
-    const blended = (1- bioWeight) * plannedNormalized + bioWeight * bioArousal;
-    deviation = Math.round(Math.abs(plannedNormalized - bioArousal) *100)/100;
+    const blended =
+      (1 - bioWeight) * plannedNormalized + bioWeight * bioArousal;
+    deviation =
+      Math.round(Math.abs(plannedNormalized - bioArousal) * 100) / 100;
 
     //Scale back to 1-10 for emotion matching
     finalArousal = blended * 10;
@@ -134,7 +134,8 @@ export const getBiometricAdjustedEmotion = (
     deviation = 0;
   }
 
-  finalArousal = Math.round(Math.min(10, Math.max(1, finalArousal)) * 100) / 100;
+  finalArousal =
+    Math.round(Math.min(10, Math.max(1, finalArousal)) * 100) / 100;
 
   const closestEmotion = findClosestEmotion(planned.valence, finalArousal);
 
@@ -155,7 +156,7 @@ export const getBiometricAdjustedEmotion = (
 export const getAdaptationStrategy = (
   deviation: number,
   plannedArousal: number,
-  bioArousal: number | null
+  bioArousal: number | null,
 ): "on_track" | "slow_down" | "intensify" | "hold_steady" => {
   if (bioArousal === null || deviation < 0.15) return "on_track";
 

@@ -4,16 +4,31 @@ export default function BiomarkerCard({
   icon,
   label,
   value,
+  numberOfLines = 1,
+  customWidth = undefined,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
+  numberOfLines?: number;
+  customWidth?: number;
 }) {
   return (
-    <View style={styles.bioCard}>
+    <View
+      style={[
+        styles.bioCard,
+        customWidth ? { width: `${customWidth}%` } : undefined,
+      ]}
+    >
       {icon}
       <Text style={styles.bioLabel}>{label}</Text>
-      <Text style={styles.bioValue}>{value}</Text>
+      <Text
+        style={styles.bioValue}
+        numberOfLines={numberOfLines}
+        ellipsizeMode="tail"
+      >
+        {value}
+      </Text>
     </View>
   );
 }

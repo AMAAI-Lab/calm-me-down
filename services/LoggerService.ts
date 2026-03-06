@@ -16,15 +16,17 @@ const formatLog = (level: string, args: any[]) => {
 };
 
 const readLogs = async () => {
+  // Can't add console warnings/errors in this function, as it can create infinite recursive calls
   try {
     const fileInfo = await FileSystem.getInfoAsync(LOG_FILE);
-    if (!fileInfo.exists){
-      console.log("Log file doesnt exist yet, returning empty");
+    if (!fileInfo.exists) {
+      // LOGS FILE does not exist yet, returning empty string!
       return "";
     }
+
     return await FileSystem.readAsStringAsync(LOG_FILE);
-  } catch (e: any) {
-    console.error("Read Logs file Failed! ", e?.message);
+  } catch {
+    // "Read Logs file Failed!"
     return "";
   }
 };
@@ -47,10 +49,7 @@ const writeLog = (text: string) => {
 export const viewLogs = async () => {
   try {
     const logs = await readLogs();
-    Alert.alert(
-      "App Logs (Last 4KB)",
-      logs.slice(-4000) || "No logs yet"
-    );
+    Alert.alert("App Logs (Last 4KB)", logs.slice(-4000) || "No logs yet");
   } catch {
     Alert.alert("Logs", "No log file found");
   }
@@ -91,10 +90,9 @@ console.error = (...args) => {
 //   console.error = () => {};
 // }
 
-
 //  SPECIFIC LOGS ONLY
 // type LogLevel = "INFO" | "DEBUG" | "WARN" | "ERROR";
-// const ENABLED_LEVELS: LogLevel[] = ["INFO", "WARN", "ERROR"]; 
+// const ENABLED_LEVELS: LogLevel[] = ["INFO", "WARN", "ERROR"];
 
 // const format = (level: LogLevel, message: string) =>
 //   `[${new Date().toLocaleString()}] [${level}] ${message}\n`;
