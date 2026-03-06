@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import {
-  View,
   Text,
   StyleSheet,
   Pressable,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from "react-native";
 import { FontAwesome5 } from "@expo/vector-icons";
 import EmotionInput from "../components/ui/emotion-input";
@@ -46,61 +48,74 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.header}>Emotion to Lyric Generator 🎧</Text>
-
-      <EmotionInput
-        label="Your name"
-        placeholder="e.g. Alex"
-        icon={<FontAwesome5 name="user" size={16} color="#fff" />}
-        value={form.name}
-        onChange={(t) => handleChange("name", t)}
-      />
-      <EmotionInput
-        label="Your age"
-        placeholder="e.g. 24"
-        icon={<FontAwesome5 name="birthday-cake" size={16} color="#fff" />}
-        value={form.age}
-        onChange={(t) => handleChange("age", t)}
-      />
-      <EmotionInput
-        label="Email"
-        placeholder="e.g. alex@gmail.com"
-        icon={<FontAwesome5 name="envelope" size={16} color="#fff" />}
-        value={form.email}
-        onChange={(t) => handleChange("email", t)}
-      />
-      <EmotionInput
-        label="Favorite genre"
-        placeholder="Pop, Rock, Indie, EDM..."
-        icon={<FontAwesome5 name="music" size={16} color="#fff" />}
-        value={form.favoriteGenre}
-        onChange={(t) => handleChange("favoriteGenre", t)}
-      />
-      <EmotionInput
-        label="Favorite band / artist"
-        placeholder="Coldplay, Arctic Monkeys, Imagine Dragons..."
-        icon={<FontAwesome5 name="headphones" size={16} color="#fff" />}
-        value={form.favoriteBand}
-        onChange={(t) => handleChange("favoriteBand", t)}
-      />
-
-      <Pressable
-        onPress={handleSubmit}
-        disabled={!isComplete}
-        style={[styles.button, !isComplete && !loading && { opacity: 0.4 }]}
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        {loading ? (
-          <ActivityIndicator color="#fff" size={30} />
-        ) : (
-          <Text style={styles.buttonText}>Continue</Text>
-        )}
-      </Pressable>
-    </View>
+        <Text style={styles.header}>Emotion to Lyric Generator 🎧</Text>
+
+        <EmotionInput
+          label="Your name"
+          placeholder="e.g. Alex"
+          icon={<FontAwesome5 name="user" size={16} color="#fff" />}
+          value={form.name}
+          onChange={(t) => handleChange("name", t)}
+        />
+        <EmotionInput
+          label="Your age"
+          placeholder="e.g. 24"
+          icon={<FontAwesome5 name="birthday-cake" size={16} color="#fff" />}
+          value={form.age}
+          onChange={(t) => handleChange("age", t)}
+        />
+        <EmotionInput
+          label="Email"
+          placeholder="e.g. alex@gmail.com"
+          icon={<FontAwesome5 name="envelope" size={16} color="#fff" />}
+          value={form.email}
+          onChange={(t) => handleChange("email", t)}
+        />
+        <EmotionInput
+          label="Favorite genre"
+          placeholder="Pop, Rock, Indie, EDM..."
+          icon={<FontAwesome5 name="music" size={16} color="#fff" />}
+          value={form.favoriteGenre}
+          onChange={(t) => handleChange("favoriteGenre", t)}
+        />
+        <EmotionInput
+          label="Favorite band / artist"
+          placeholder="Coldplay, Arctic Monkeys, Imagine Dragons..."
+          icon={<FontAwesome5 name="headphones" size={16} color="#fff" />}
+          value={form.favoriteBand}
+          onChange={(t) => handleChange("favoriteBand", t)}
+        />
+
+        <Pressable
+          onPress={handleSubmit}
+          disabled={!isComplete}
+          style={[styles.button, !isComplete && !loading && { opacity: 0.4 }]}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" size={30} />
+          ) : (
+            <Text style={styles.buttonText}>Continue</Text>
+          )}
+        </Pressable>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+    backgroundColor: "#171A1F",
+  },
   container: {
     flex: 1,
     backgroundColor: "#171A1F",

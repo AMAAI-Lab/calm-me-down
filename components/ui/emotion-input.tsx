@@ -24,9 +24,6 @@ export default function EmotionInput({
           style={styles.emotionTextInput}
           value={value}
           onChangeText={onChange}
-          keyboardType={label === "Your age" ? "number-pad" : "default"}
-
-          // keyboardType={label === "Your age" ? "number-pad" : "default"}
         />
       </View>
     </View>

@@ -179,6 +179,12 @@ export default function HomeScreen() {
     setEmotionPath(emotionTrajectory);
 
     let prompt = "";
+    let adjustedEmotion = {
+      valence: 0,
+      arousal: 0,
+      emotion: "",
+      deviation: 0,
+    };
     if (HRV_APP_VERSION) {
       const vaTrajectory = buildVAPath(input.currentMood, input.desiredMood);
       console.log("VA Trajectory:", vaTrajectory);
@@ -186,7 +192,7 @@ export default function HomeScreen() {
       setBioLog([]); // Reset bio log for new session
 
       // Get biometric-adjusted emotion for the first song
-      const adjustedEmotion = getBiometricAdjustedEmotion(
+      adjustedEmotion = getBiometricAdjustedEmotion(
         vaTrajectory,
         0,
         healthData.arousal,
@@ -334,7 +340,7 @@ export default function HomeScreen() {
     // Generate Song Audio
     setGeneratingSong(true);
     console.log(
-      `Generating song with lyrics: ${(currentLyrics || "").substring(0, 150)}...`,
+      `Generating song with lyrics: ${(currentLyrics || "").substring(0, 50)}...`,
     );
 
     let generatedStreamUrl = null;
@@ -342,7 +348,7 @@ export default function HomeScreen() {
       const generatedSong = await generateSong(
         currentLyrics || "Uplifting song",
         input.favoriteGenre,
-        input.desiredMood,
+        adjustedEmotion.emotion || input.desiredMood,
         currentSongIndex,
       );
       if (generatedSong) {
@@ -377,6 +383,7 @@ export default function HomeScreen() {
           mood: emotionTrajectory[0],
           streamUrl: generatedStreamUrl || songQueue[0]?.audioUrl || "",
           lyrics: currentLyrics,
+          lyricsPrompt: prompt,
         },
       );
       if (trackRes?.id) {
@@ -508,8 +515,14 @@ export default function HomeScreen() {
     const currentMood = emotionPath?.[nextSongIdx] || input.currentMood;
 
     let prompt = "";
+    let adjustedEmotion = {
+      valence: 0,
+      arousal: 0,
+      emotion: "",
+      deviation: 0,
+    };
     if (HRV_APP_VERSION) {
-      const adjustedEmotion = getBiometricAdjustedEmotion(
+      adjustedEmotion = getBiometricAdjustedEmotion(
         vaPath,
         nextSongIdx,
         latestHealthData.arousal,
@@ -652,7 +665,7 @@ export default function HomeScreen() {
       const generatedSong = await generateSong(
         currentLyrics || "Uplifting song",
         input?.favoriteGenre || "N/A",
-        input?.desiredMood || "N/A",
+        adjustedEmotion.emotion || input?.desiredMood || "N/A",
         nextSongIdx,
       );
       if (generatedSong) {
@@ -679,6 +692,7 @@ export default function HomeScreen() {
           streamUrl:
             generatedStreamUrl || songQueue[nextSongIdx]?.audioUrl || "",
           lyrics: currentLyrics,
+          lyricsPrompt: prompt,
         },
       );
       if (trackRes?.id) {
@@ -897,10 +911,14 @@ export default function HomeScreen() {
         )}
 
         {/* Display  lyrics and Audio Player */}
-        {generatedLyrics.length > 0 && (
+        {(generatedLyrics || currentSong) && (
           <View style={styles.stepContainer}>
-            <Text style={styles.lyricsTitle}>Your Song</Text>
-            <Text style={styles.lyricsText}>{generatedLyrics}</Text>
+            {generatedLyrics && generatedLyrics?.length && (
+              <View>
+                <Text style={styles.lyricsTitle}>Your Song</Text>
+                <Text style={styles.lyricsText}>{generatedLyrics}</Text>
+              </View>
+            )}
 
             {currentSong && (
               <>

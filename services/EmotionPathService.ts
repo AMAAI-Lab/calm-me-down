@@ -1,4 +1,16 @@
-import { EMOTION_MAP, EmotionPoint } from "@/constants/appConstants";
+import {
+  EMOTION_MAP,
+  EmotionPoint,
+  PATH_DEFAULT_STEPS,
+  PATH_FALLBACK_VA,
+  BIO_DEFAULT_WEIGHT,
+  BIO_AROUSAL_SCALE,
+  BIO_AROUSAL_CLAMP_MAX,
+  BIO_AROUSAL_CLAMP_MIN,
+  ADAPTATION_ON_TRACK_THRESHOLD,
+  ADAPTATION_INTENSIFY_THRESHOLD,
+  ADAPTATION_SLOW_DOWN_THRESHOLD,
+} from "@/constants/appConstants";
 
 const getEmotionPoint = (emotion: string) =>
   EMOTION_MAP.find((e) => e.emotion.toLowerCase() === emotion.toLowerCase());
@@ -23,7 +35,7 @@ const findClosestEmotion = (valence: number, arousal: number): EmotionPoint => {
 export const buildEmotionPath = (
   startEmotion: string,
   endEmotion: string,
-  steps = 5,
+  steps = PATH_DEFAULT_STEPS,
 ): string[] => {
   const start = getEmotionPoint(startEmotion);
   const end = getEmotionPoint(endEmotion);
@@ -57,16 +69,13 @@ export const buildEmotionPath = (
 export const buildVAPath = (
   startEmotion: string,
   endEmotion: string,
-  steps = 5,
+  steps = PATH_DEFAULT_STEPS,
 ): { valence: number; arousal: number }[] => {
   const start = getEmotionPoint(startEmotion);
   const end = getEmotionPoint(endEmotion);
 
   if (!start || !end) {
-    return [
-      { valence: 0, arousal: 0.5 },
-      { valence: 0, arousal: 0.5 },
-    ];
+    return [PATH_FALLBACK_VA, PATH_FALLBACK_VA];
   }
 
   const trajectory: { valence: number; arousal: number }[] = [];
@@ -96,14 +105,14 @@ export const buildVAPath = (
  * @param vaPath        - The planned VA trajectory from buildVAPath()
  * @param songIndex     - Current song index in the playlist
  * @param bioArousal    - Live arousal from HealthService.estimateArousal() (0-1, or null)
- * @param bioWeight     - How much to weight biometric signal vs planned (0-1, default 0.6)
+ * @param bioWeight     - How much to weight biometric signal vs planned (0-1, default BIO_DEFAULT_WEIGHT)
  * @returns { valence, arousal, emotion, deviation }
  */
 export const getBiometricAdjustedEmotion = (
   vaPath: { valence: number; arousal: number }[],
   songIndex: number,
   bioArousal: number | null,
-  bioWeight: number = 0.6,
+  bioWeight: number = BIO_DEFAULT_WEIGHT,
 ): {
   valence: number;
   arousal: number;
@@ -120,22 +129,27 @@ export const getBiometricAdjustedEmotion = (
   if (bioArousal !== null) {
     // Blend: bioWeight of live signal, (1 - bioWeight) of planned trajectory
     //Normalize from scores of 1-10 to 0-1
-    const plannedNormalized = planned.arousal / 10;
+    const plannedNormalized = planned.arousal / BIO_AROUSAL_SCALE;
 
     const blended =
       (1 - bioWeight) * plannedNormalized + bioWeight * bioArousal;
     deviation =
       Math.round(Math.abs(plannedNormalized - bioArousal) * 100) / 100;
 
-    //Scale back to 1-10 for emotion matching
-    finalArousal = blended * 10;
+    // Scale back to 1–10 for emotion matching
+    finalArousal = blended * BIO_AROUSAL_SCALE;
   } else {
     finalArousal = planned.arousal;
     deviation = 0;
   }
 
   finalArousal =
-    Math.round(Math.min(10, Math.max(1, finalArousal)) * 100) / 100;
+    Math.round(
+      Math.min(
+        BIO_AROUSAL_CLAMP_MAX,
+        Math.max(BIO_AROUSAL_CLAMP_MIN, finalArousal),
+      ) * 100,
+    ) / 100;
 
   const closestEmotion = findClosestEmotion(planned.valence, finalArousal);
 
@@ -158,15 +172,18 @@ export const getAdaptationStrategy = (
   plannedArousal: number,
   bioArousal: number | null,
 ): "on_track" | "slow_down" | "intensify" | "hold_steady" => {
-  if (bioArousal === null || deviation < 0.15) return "on_track";
+  if (bioArousal === null || deviation < ADAPTATION_ON_TRACK_THRESHOLD)
+    return "on_track";
 
-  const plannedNorm = plannedArousal / 10;
+  const plannedNorm = plannedArousal / BIO_AROUSAL_SCALE;
 
   // Bio arousal is higher than planned — person isn't calming down
-  if (bioArousal > plannedNorm + 0.15) return "slow_down";
+  if (bioArousal > plannedNorm + ADAPTATION_SLOW_DOWN_THRESHOLD)
+    return "slow_down";
 
   // Bio arousal is lower than planned — person is calmer than expected
-  if (bioArousal < plannedNorm - 0.15) return "intensify";
+  if (bioArousal < plannedNorm - ADAPTATION_INTENSIFY_THRESHOLD)
+    return "intensify";
 
   return "hold_steady";
 };

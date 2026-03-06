@@ -3,6 +3,15 @@ import {
   HeartRateSample,
   HRV_APP_VERSION,
   HRV_DURATION_MINS,
+  AROUSAL_DEFAULT_RESTING_HR,
+  AROUSAL_ASSUMED_AGE,
+  AROUSAL_STEPS_ACTIVITY_CEILING,
+  AROUSAL_HRV_LOW_THRESHOLD,
+  AROUSAL_HRV_HIGH_THRESHOLD,
+  AROUSAL_HR_BLEND_WEIGHT,
+  AROUSAL_HRV_BLEND_WEIGHT,
+  LIVE_VA_TRAJECTORY_WEIGHT,
+  LIVE_VA_BIOMETRIC_WEIGHT,
 } from "@/constants/appConstants";
 import { LocationObject } from "expo-location";
 import { NativeModules, Platform } from "react-native";
@@ -94,19 +103,21 @@ export function estimateArousal(
   hr: number | null,
   steps: number | null,
   hrv: number | null = null,
-  restingHR: number = 70,
+  restingHR: number = AROUSAL_DEFAULT_RESTING_HR,
 ): number | null {
   if (hr === null) return null;
 
   const safeSteps = steps ?? 0;
 
   // Normalize HR elevation: 0 = at resting, 1 = near max HR
-  const maxHR = 220 - 30; // approximate, assuming ~30 years; adjust as needed
+  const maxHR = 220 - AROUSAL_ASSUMED_AGE;
   const hrElevation = Math.max(0, (hr - restingHR) / (maxHR - restingHR));
 
   // Activity factor: how much of the HR elevation is explained by physical activity
-  // ~200 steps in the window = moderate walking, scale 0–1
-  const activityFactor = Math.min(safeSteps / 200, 1);
+  const activityFactor = Math.min(
+    safeSteps / AROUSAL_STEPS_ACTIVITY_CEILING,
+    1,
+  );
 
   // Emotional arousal = HR elevation minus the portion explained by activity
   let emotionalArousal = Math.max(0, hrElevation - activityFactor * 0.5);
@@ -114,9 +125,15 @@ export function estimateArousal(
   // If HRV is available, incorporate it (low HRV = higher stress/arousal)
   // Typical resting HRV: 20–100ms; below 30 = high stress, above 60 = relaxed
   if (hrv !== null && hrv > 0) {
-    const hrvStressFactor = Math.max(0, Math.min(1, 1 - (hrv - 20) / 60));
+    const hrvRange = AROUSAL_HRV_HIGH_THRESHOLD - AROUSAL_HRV_LOW_THRESHOLD;
+    const hrvStressFactor = Math.max(
+      0,
+      Math.min(1, 1 - (hrv - AROUSAL_HRV_LOW_THRESHOLD) / hrvRange),
+    );
     // Blend: 60% HR-based, 40% HRV-based
-    emotionalArousal = 0.6 * emotionalArousal + 0.4 * hrvStressFactor;
+    emotionalArousal =
+      AROUSAL_HR_BLEND_WEIGHT * emotionalArousal +
+      AROUSAL_HRV_BLEND_WEIGHT * hrvStressFactor;
   }
 
   return Math.min(1, Math.round(emotionalArousal * 100) / 100);
@@ -152,8 +169,9 @@ export function computeLiveVA(
 
   let arousal: number;
   if (bioArousal !== null) {
-    // 40% planned trajectory, 60% live biometric signal
-    arousal = 0.4 * targetArousal + 0.6 * bioArousal;
+    arousal =
+      LIVE_VA_TRAJECTORY_WEIGHT * targetArousal +
+      LIVE_VA_BIOMETRIC_WEIGHT * bioArousal;
   } else {
     // No biometric data — fall back to planned trajectory
     arousal = targetArousal;
@@ -241,12 +259,11 @@ export async function fetchAppleHealthData(
         type: "StepCount",
       },
       (err: string, results: HealthValue[]) => {
-        console.log("All samples for Steps: ", JSON.stringify(results,null,2));
+        console.log("Steps raw results: ", JSON.stringify(results, null, 2));
         if (err || !results?.length) {
           console.error("Error fetching steps");
           resolve(0);
         } else {
-          console.log("Fetching steps - ")
           const totalSteps = results.reduce(
             (sum, sample: any) =>
               sum + (sample?.quantity || sample?.value || 0),
@@ -280,7 +297,8 @@ export async function fetchAppleHealthData(
             resolve(null);
           } else {
             // HRV is in ms (SDNN). Return the most recent sample.
-            const latest = results[results.length - 1];
+            //const latest = results[results.length - 1];
+            const latest = results[0];
             const hrvMs = Math.round(latest.value * 1000); //convert seconds to ms
             console.log(`HRV: ${hrvMs} ms at ${latest.startDate}`);
             resolve(hrvMs);

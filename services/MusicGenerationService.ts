@@ -1,13 +1,14 @@
 import { documentDirectory, downloadAsync } from "expo-file-system/legacy";
 import { Alert } from "react-native";
 import { ENV } from "@/config/env";
+import {
+  CURRENT_LYRICS_PROVIDER,
+  CURRENT_SONG_PROVIDER,
+  LYRICS_PROVIDERS,
+  LyricsProviderType,
+} from "@/constants/appConstants";
 
 // --- CONFIGURATION ---
-const CURRENT_LYRICS_PROVIDER: "PERPLEXITY" | "CLAUDE" = "CLAUDE";
-
-// Change this to 'SUNO', 'REPLICATE', or 'MOCK' to switch engines
-const CURRENT_SONG_PROVIDER: "SUNO_ORG" | "SUNO" | "REPLICATE" | "MOCK" =
-  "SUNO_ORG";
 
 // --- API KEYS & CONSTANTS ---
 // const CLAUDE_API_KEY = process.env.EXPO_PUBLIC_CLAUDE_API_KEY;
@@ -16,6 +17,8 @@ const CURRENT_SONG_PROVIDER: "SUNO_ORG" | "SUNO" | "REPLICATE" | "MOCK" =
 // const SUNO_ORG_API_KEY = process.env.EXPO_PUBLIC_SUNO_ORG_API_KEY;
 // const REPLICATE_API_KEY = process.env.EXPO_PUBLIC_REPLICATE_API_KEY;
 
+const OPEN_AI_API_KEY = process.env.EXPO_PUBLIC_OPEN_AI_API_KEY;
+const GROK_API_KEY = process.env.EXPO_PUBLIC_GROK_API_KEY;
 const CLAUDE_API_KEY = ENV.CLAUDE_API_KEY;
 const PPLX_API_KEY = ENV.PPLX_API_KEY;
 const SUNO_API_KEY = ENV.SUNO_API_KEY;
@@ -52,16 +55,64 @@ function notifyFinalReady(taskId: string, url: string) {
 }
 
 export async function generatelyrics(prompt: string): Promise<string | null> {
-  console.log(
-    `LYRICS SERVICE: Starting Lyrics Generation using [${CURRENT_LYRICS_PROVIDER}]`,
-  );
+  const providers: LyricsProviderType[] = [
+    CURRENT_LYRICS_PROVIDER,
+    ...LYRICS_PROVIDERS.filter((p) => p !== CURRENT_LYRICS_PROVIDER),
+  ];
 
-  switch (CURRENT_LYRICS_PROVIDER) {
+  for (const provider of providers) {
+    console.log(
+      `LYRICS SERVICE: Starting Lyrics Generation using [${provider}]`,
+    );
+
+    const result = await generateWithProvider(provider, prompt);
+
+    if (result) {
+      if (provider !== CURRENT_LYRICS_PROVIDER) {
+        console.log(`LYRICS SERVICE: Fell back to [${provider}] successfully`);
+      }
+      return result;
+    }
+
+    console.warn(
+      `LYRICS SERVICE: Provider [${provider}] failed, trying next...`,
+    );
+  }
+
+  console.error("LYRICS SERVICE: All providers failed.");
+  return null;
+}
+
+async function generateWithProvider(
+  provider: LyricsProviderType,
+  prompt: string,
+): Promise<string | null> {
+  switch (provider) {
     case "CLAUDE":
       return await generateWithClaude(prompt);
+    case "GROK":
+      return await generateWithGrok(prompt);
+    case "OPEN_AI":
+      return await generateWithOpenAi(prompt);
     case "PERPLEXITY":
     default:
       return await generateWithPerplexity(prompt);
+  }
+}
+
+function extractLyrics(text: string) {
+  try {
+    const cleaned = (text || "").replace(/```json\n/, "").replace(/\n```$/, "");
+    const parsed = JSON.parse(cleaned);
+    const lyrics = Object.values(parsed.lyrics).join("\n\n");
+
+    return lyrics;
+  } catch (error: any) {
+    console.error(
+      `Failed to extract lyrics from response by [${CURRENT_LYRICS_PROVIDER}]: `,
+      error?.message,
+    );
+    return "";
   }
 }
 
@@ -96,8 +147,7 @@ async function generateWithPerplexity(prompt: string): Promise<string | null> {
       );
     }
 
-    const lyrics = data.choices[0]?.message?.content || "";
-    return lyrics;
+    return extractLyrics(data.choices[0]?.message?.content || "");
   } catch (error: any) {
     console.error(
       "An error occurred while generating song lyrics with PERPLEXITY:",
@@ -138,18 +188,86 @@ async function generateWithClaude(prompt: string): Promise<string | null> {
       );
     }
 
-    const cleaned = (data?.content[0]?.text || "")
-      .replace(/```json\n/, "")
-      .replace(/\n```$/, "");
-
-    const parsed = JSON.parse(cleaned);
-    // console.log("parsed:", parsed);
-    const lyrics = Object.values(parsed.lyrics).join("\n\n");
-    // console.log("lyrics:", lyrics);
-    return lyrics;
+    return extractLyrics(data?.content[0]?.text || "");
   } catch (error: any) {
     console.error(
       "An error occurred while generating song lyrics with CLUADE:",
+      error?.message,
+    );
+    return null;
+  }
+}
+
+async function generateWithOpenAi(prompt: string): Promise<string | null> {
+  if (!OPEN_AI_API_KEY) {
+    Alert.alert(
+      "API Key Missing",
+      "Please set the OPEN_AI API key to generate lyrics.",
+    );
+    return null;
+  }
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${OPEN_AI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        input: [{ role: "user", content: prompt }],
+        model: "gpt-5.2",
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(
+        data.error?.message || "OPEN_AI failed to generate lyrics.",
+      );
+    }
+
+    return extractLyrics(data?.output[0]?.content[0]?.text || "");
+  } catch (error: any) {
+    console.error(
+      "An error occurred while generating song lyrics with OPEN_AI:",
+      error?.message,
+    );
+    return null;
+  }
+}
+
+async function generateWithGrok(prompt: string): Promise<string | null> {
+  if (!GROK_API_KEY) {
+    Alert.alert(
+      "API Key Missing",
+      "Please set the GROK API key to generate lyrics.",
+    );
+    return null;
+  }
+
+  try {
+    const response = await fetch("https://api.x.ai/v1/responses", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${GROK_API_KEY}`,
+      },
+      body: JSON.stringify({
+        input: [{ role: "user", content: prompt }],
+        model: "grok-4-0709",
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error?.message || "GROK failed to generate lyrics.");
+    }
+
+    return extractLyrics(data?.output[0]?.content[0]?.text || "");
+  } catch (error: any) {
+    console.error(
+      "An error occurred while generating lyrics with GROK:",
       error?.message,
     );
     return null;
@@ -251,83 +369,6 @@ async function generateWithSunoOrg(
   }
 }
 
-// async function pollSunoOrg(
-//   taskId: string,
-//   mood: string,
-// ): Promise<GeneratedSong | null> {
-//   const maxAttempts = 150;
-//   let attempts = 0;
-
-//   console.log(`Polling Task ${taskId} (Max 5 mins)...`);
-
-//   while (attempts < maxAttempts) {
-//     await new Promise((resolve) => setTimeout(resolve, 3000)); // Wait 3s
-//     attempts++;
-
-//     // SunoAPI.org polling endpoint
-//     const response = await fetch(
-//       `https://api.sunoapi.org/api/v1/generate/record-info?taskId=${taskId}`,
-//       {
-//         headers: { Authorization: `Bearer ${SUNO_ORG_API_KEY}` },
-//       },
-//     );
-
-//     const data = await response.json();
-//     const info = data.data; // Usually data.data[0] or just data.data
-
-//     // Check structure (API response format varies slightly by account tier)
-//     const status = info?.status || info?.[0]?.status;
-
-//     console.log(`Checking Status (${attempts}): ${status}`);
-
-//     if (
-//       status === "SUCCESS" ||
-//       status === "completed" ||
-//       status === "FIRST_SUCCESS"
-//     ) {
-//       // Success!
-//       let songList: any[] = [];
-
-//       if (Array.isArray(info)) {
-//         // Case A: Info is the list itself
-//         songList = info;
-//       } else if (info.response && Array.isArray(info.response.sunoData)) {
-//         // Case B: Your Log (Nested inside response.sunoData)
-//         songList = info.response.sunoData;
-//       } else {
-//         // Case C: Fallback single object
-//         songList = [info];
-//       }
-
-//       // 3. Find the first song that actually has a URL
-//       // (In FIRST_SUCCESS, the second song usually has an empty "" url)
-//       const validSong = songList.find(
-//         (item: any) =>
-//           (item.audioUrl && item.audioUrl.length > 0) ||
-//           (item.audio_url && item.audio_url.length > 0),
-//       );
-
-//       if (validSong) {
-//         const finalUrl = validSong.audioUrl || validSong.audio_url;
-//         console.log("SUNO_ORG: Generation Complete! URL:", finalUrl);
-//         return await downloadAndSaveAudio(
-//           finalUrl,
-//           `suno_org_${taskId}.mp3`,
-//           mood,
-//           "SUNO_ORG",
-//         );
-//       } else {
-//         console.log(`Status is ${status} but valid audio URL not found yet.`);
-//       }
-//     } else if (status === "TEXT_SUCCESS") {
-//       // Do NOTHING. Just log it and keep looping.
-//       console.log(" Lyrics written... waiting for audio...");
-//     } else if (status === "FAILED") throw new Error("SunoOrg task failed.");
-//   }
-
-//   throw new Error("SunoOrg timeout.");
-// }
-
 function extractSunoOrgData(info: any) {
   let songList: any[] = [];
 
@@ -370,24 +411,6 @@ async function pollSunoOrgStreamUrl(
 
     // Stream url is ready
     if (status === "TEXT_SUCCESS") {
-      //       sunoData: [
-      //   {
-      //     "id": "8900987c-3b68-4ea8-8104-2ed567cd20a0",
-      //     "audioUrl": "",
-      //     "sourceAudioUrl": null,
-      //     "streamAudioUrl": "https://musicfile.removeai.ai/ODkwMDk4N2MtM2I2OC00ZWE4LTgxMDQtMmVkNTY3Y2QyMGEw",
-      //     "sourceStreamAudioUrl": "https://audiopipe.suno.ai/?item_id=8900987c-3b68-4ea8-8104-2ed567cd20a0",
-      //     "imageUrl": "https://tempfile.aiquickdraw.com/r/396b202e49584bd4a6ab336e45e13f3b.jpeg",
-      //     "sourceImageUrl": "https://cdn2.suno.ai/image_8900987c-3b68-4ea8-8104-2ed567cd20a0.jpeg",
-      //     "prompt": "A calm and relaxing piano track with soft melodies",
-      //     "modelName": "chirp-auk-turbo",
-      //     "title": "Peaceful Piano Meditation",
-      //     "tags": "Classical",
-      //     "createTime": 1770707826604,
-      //     "duration": null
-      //   },
-      // ]
-
       const sunoData = extractSunoOrgData(info);
       const streamable = sunoData?.find((item: any) => item.streamAudioUrl);
 

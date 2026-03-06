@@ -83,3 +83,37 @@ export const EMOTION_OPTIONS = EMOTION_MAP.map((e) => e.emotion).sort();
 export const MAX_LOG_FILE_SIZE = 500_000; // 500KB
 export const HRV_APP_VERSION = true;
 export const HRV_DURATION_MINS = 1440; //24 hours
+
+export const LYRICS_PROVIDERS = ["CLAUDE", "GROK", "OPEN_AI", "PERPLEXITY"];
+export type LyricsProviderType = typeof LYRICS_PROVIDERS[number];
+export const CURRENT_LYRICS_PROVIDER: "PERPLEXITY" | "CLAUDE" | "GROK" | "OPEN_AI" = "CLAUDE";
+export const CURRENT_SONG_PROVIDER: "SUNO_ORG" | "SUNO" | "REPLICATE" | "MOCK" =
+  "SUNO_ORG";
+
+// Tunable constants for arousal estimation
+export const AROUSAL_DEFAULT_RESTING_HR = 70; // bpm — personalize per user over time
+export const AROUSAL_ASSUMED_AGE = 30; // used in max HR formula (220 - age)
+export const AROUSAL_STEPS_ACTIVITY_CEILING = 200; // steps in window considered "moderate walking"
+export const AROUSAL_HRV_LOW_THRESHOLD = 20; // ms — below this = high stress
+export const AROUSAL_HRV_HIGH_THRESHOLD = 60; // ms — above this = relaxed
+export const AROUSAL_HR_BLEND_WEIGHT = 0.6; // weight for HR-based arousal when HRV present
+export const AROUSAL_HRV_BLEND_WEIGHT = 0.4; // weight for HRV-based stress factor
+
+// Tunable constants for VA trajectory computation
+export const LIVE_VA_TRAJECTORY_WEIGHT = 0.4; // weight for planned arousal trajectory
+export const LIVE_VA_BIOMETRIC_WEIGHT = 0.6; // weight for live biometric arousal signal
+
+// --- Tunable constants for buildEmotionPath / buildVAPath ---
+export const PATH_DEFAULT_STEPS = 5; // number of interpolation steps between start and end emotion
+
+export const BIO_DEFAULT_WEIGHT = 0.6; // how much live biometric arousal influences final arousal (0–1)
+export const BIO_AROUSAL_SCALE = 10; // VA path arousal is stored on a 1–10 scale; biometric is 0–1
+export const BIO_AROUSAL_CLAMP_MIN = 1; // minimum clamped arousal value (on 1–10 scale)
+export const BIO_AROUSAL_CLAMP_MAX = 10; // maximum clamped arousal value (on 1–10 scale)
+
+export const ADAPTATION_ON_TRACK_THRESHOLD = 0.15; // deviation below this = "on track"
+export const ADAPTATION_SLOW_DOWN_THRESHOLD = 0.15; // bio arousal this much above planned = "slow_down"
+export const ADAPTATION_INTENSIFY_THRESHOLD = 0.15; // bio arousal this much below planned = "intensify"
+
+// Fallback VA coordinate when start/end emotion cannot be resolved
+export const PATH_FALLBACK_VA = { valence: 0, arousal: 0.5 };
