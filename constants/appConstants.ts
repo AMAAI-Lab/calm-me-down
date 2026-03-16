@@ -50,6 +50,11 @@ export const EMOTION_MAP: EmotionPoint[] = [
   { emotion: "Tense", valence: 4.56, arousal: 4.95 },
   { emotion: "Intense", valence: 6.33, arousal: 7.97 },
   { emotion: "Mysterious", valence: 5.03, arousal: 7.29 },
+  { emotion: "Disgusted", valence: 1.47, arousal: 6.53 },
+  { emotion: "Frustrated", valence: 2.09, arousal: 7.84 },
+  { emotion: "Ashamed", valence: 2.06, arousal: 5.03 },
+  { emotion: "Bitter", valence: 1.75, arousal: 5.31 },
+  { emotion: "Helpless", valence: 1.84, arousal: 5.07 },
 
   // Q3 – Low Valence, Low Arousal
   { emotion: "Depressed", valence: 1.22, arousal: 5.0 },
@@ -58,6 +63,8 @@ export const EMOTION_MAP: EmotionPoint[] = [
   { emotion: "Sad", valence: 3.02, arousal: 4.0 },
   { emotion: "Melancholic", valence: 2.63, arousal: 3.75 },
   { emotion: "Sorrowful", valence: 1.44, arousal: 4.8 },
+  { emotion: "Tired", valence: 3.38, arousal: 3.02 },
+  { emotion: "Bored", valence: 3.34, arousal: 2.8 },
 
   // Q4 – High Valence, Low Arousal
   { emotion: "Peaceful", valence: 8.8, arousal: 1.49 },
@@ -81,12 +88,16 @@ export const EMOTION_MAP: EmotionPoint[] = [
 
 export const EMOTION_OPTIONS = EMOTION_MAP.map((e) => e.emotion).sort();
 export const MAX_LOG_FILE_SIZE = 500_000; // 500KB
-export const HRV_APP_VERSION = true;
+export const HRV_APP_VERSION = false;
 export const HRV_DURATION_MINS = 1440; //24 hours
 
 export const LYRICS_PROVIDERS = ["CLAUDE", "GROK", "OPEN_AI", "PERPLEXITY"];
-export type LyricsProviderType = typeof LYRICS_PROVIDERS[number];
-export const CURRENT_LYRICS_PROVIDER: "PERPLEXITY" | "CLAUDE" | "GROK" | "OPEN_AI" = "CLAUDE";
+export type LyricsProviderType = (typeof LYRICS_PROVIDERS)[number];
+export const CURRENT_LYRICS_PROVIDER:
+  | "PERPLEXITY"
+  | "CLAUDE"
+  | "GROK"
+  | "OPEN_AI" = "CLAUDE";
 export const CURRENT_SONG_PROVIDER: "SUNO_ORG" | "SUNO" | "REPLICATE" | "MOCK" =
   "SUNO_ORG";
 
@@ -117,3 +128,16 @@ export const ADAPTATION_INTENSIFY_THRESHOLD = 0.15; // bio arousal this much bel
 
 // Fallback VA coordinate when start/end emotion cannot be resolved
 export const PATH_FALLBACK_VA = { valence: 0, arousal: 0.5 };
+
+//SUNO ORG payload
+export const SUNO_ORG_PAYLOAD = {
+  customMode: true,
+  instrumental: false,
+  model: "V4_5ALL",
+  personaId: "persona_123",
+  negativeTags: "Heavy Metal, Upbeat Drums",
+  vocalGender: "m",
+  styleWeight: 0.65,
+  weirdnessConstraint: 0.65,
+  audioWeight: 0.65,
+};

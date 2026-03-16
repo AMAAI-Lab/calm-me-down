@@ -1,17 +1,17 @@
 import {
+  AROUSAL_ASSUMED_AGE,
+  AROUSAL_DEFAULT_RESTING_HR,
+  AROUSAL_HR_BLEND_WEIGHT,
+  AROUSAL_HRV_BLEND_WEIGHT,
+  AROUSAL_HRV_HIGH_THRESHOLD,
+  AROUSAL_HRV_LOW_THRESHOLD,
+  AROUSAL_STEPS_ACTIVITY_CEILING,
   EmotionPoint,
   HeartRateSample,
   HRV_APP_VERSION,
   HRV_DURATION_MINS,
-  AROUSAL_DEFAULT_RESTING_HR,
-  AROUSAL_ASSUMED_AGE,
-  AROUSAL_STEPS_ACTIVITY_CEILING,
-  AROUSAL_HRV_LOW_THRESHOLD,
-  AROUSAL_HRV_HIGH_THRESHOLD,
-  AROUSAL_HR_BLEND_WEIGHT,
-  AROUSAL_HRV_BLEND_WEIGHT,
-  LIVE_VA_TRAJECTORY_WEIGHT,
   LIVE_VA_BIOMETRIC_WEIGHT,
+  LIVE_VA_TRAJECTORY_WEIGHT,
 } from "@/constants/appConstants";
 import { LocationObject } from "expo-location";
 import { NativeModules, Platform } from "react-native";
@@ -201,7 +201,7 @@ export function getTrajectoryDeviation(
 
 // --- 8. FETCH APPLE HEALTH DATA ---
 export async function fetchAppleHealthData(
-  windowMinutes: number = 10,
+  windowMinutes: number = 5,
 ): Promise<HealthData> {
   if (Platform.OS !== "ios") {
     return {

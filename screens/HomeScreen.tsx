@@ -30,6 +30,7 @@ import {
   EMOTION_OPTIONS,
   HRV_APP_VERSION,
   LISTEN_BEFORE_GENERATE_MS,
+  SUNO_ORG_PAYLOAD,
   UserInput,
 } from "../constants/appConstants";
 import { useAuth } from "../context/AuthContext";
@@ -158,6 +159,8 @@ export default function HomeScreen() {
     setDownloadedAudios({});
     setSessionId(null);
     setTrackIds([]);
+    setVaPath([]);
+    setBioLog([]);
   };
 
   const generateLyricsAndSong = async () => {
@@ -185,11 +188,12 @@ export default function HomeScreen() {
       emotion: "",
       deviation: 0,
     };
+    let hrvMetrics = {};
+
     if (HRV_APP_VERSION) {
       const vaTrajectory = buildVAPath(input.currentMood, input.desiredMood);
       console.log("VA Trajectory:", vaTrajectory);
       setVaPath(vaTrajectory);
-      setBioLog([]); // Reset bio log for new session
 
       // Get biometric-adjusted emotion for the first song
       adjustedEmotion = getBiometricAdjustedEmotion(
@@ -238,6 +242,12 @@ export default function HomeScreen() {
         newsData,
         strategy,
       });
+
+      hrvMetrics = {
+        plannedVA: vaTrajectory[0],
+        adjustedEmotion,
+        strategy,
+      };
     } else {
       prompt = `
         You are a creative songwriter. Generate original song lyrics personalized to the following inputs:
@@ -372,6 +382,7 @@ export default function HomeScreen() {
         lyricPrompt: prompt,
         songPrompt: currentLyrics,
         hrvUsed: HRV_APP_VERSION,
+        sunoOrgPayload: SUNO_ORG_PAYLOAD
       });
       setSessionId(sessionID);
 
@@ -384,6 +395,9 @@ export default function HomeScreen() {
           streamUrl: generatedStreamUrl || songQueue[0]?.audioUrl || "",
           lyrics: currentLyrics,
           lyricsPrompt: prompt,
+          heartRate: healthData?.heartRate,
+          steps: healthData?.steps,
+          hrvMetrics
         },
       );
       if (trackRes?.id) {
@@ -521,6 +535,8 @@ export default function HomeScreen() {
       emotion: "",
       deviation: 0,
     };
+    let hrvMetrics = {};
+
     if (HRV_APP_VERSION) {
       adjustedEmotion = getBiometricAdjustedEmotion(
         vaPath,
@@ -573,6 +589,12 @@ export default function HomeScreen() {
         newsData,
         strategy,
       });
+
+      hrvMetrics = {
+        plannedVA,
+        adjustedEmotion,
+        strategy,
+      };
     } else {
       console.log("Mood input for next song: ", currentMood);
       console.log("HR for next song: ", latestHealthData.heartRate);
@@ -591,8 +613,8 @@ export default function HomeScreen() {
         - mood: ${currentMood}
 
         PHYSICAL CONTEXT
-        - Heart rate: ${latestHealthData.heartRate} bpm
-        - Daily activity: ${latestHealthData.steps} steps
+        - Heart rate in last 5 min: ${latestHealthData.heartRate} bpm
+        - Movement in last 5 min: ${latestHealthData.steps} steps
         - Current or upcoming activity: ${input.activity || "None specified"}
 
         ENVIRONMENT
@@ -693,6 +715,9 @@ export default function HomeScreen() {
             generatedStreamUrl || songQueue[nextSongIdx]?.audioUrl || "",
           lyrics: currentLyrics,
           lyricsPrompt: prompt,
+          heartRate: latestHealthData?.heartRate,
+          steps: latestHealthData?.steps,
+          hrvMetrics
         },
       );
       if (trackRes?.id) {

@@ -6,6 +6,7 @@ import {
   CURRENT_SONG_PROVIDER,
   LYRICS_PROVIDERS,
   LyricsProviderType,
+  SUNO_ORG_PAYLOAD,
 } from "@/constants/appConstants";
 
 // --- CONFIGURATION ---
@@ -313,20 +314,10 @@ async function generateWithSunoOrg(
     console.log("SUNO_ORG: Sending request");
     // SunoAPI.org uses 'custom' mode for specific lyrics
     const payload = {
-      customMode: true,
-      instrumental: false,
-      model: "V4_5ALL",
+      ...SUNO_ORG_PAYLOAD,
       callBackUrl: "https://api.example.com/callback",
-      // prompt: "A calm and relaxing piano track with soft melodies",
       prompt: lyrics,
-      //style: "Classical",
       title: "Your Personal Playlist",
-      personaId: "persona_123",
-      negativeTags: "Heavy Metal, Upbeat Drums",
-      vocalGender: "m",
-      styleWeight: 0.65,
-      weirdnessConstraint: 0.65,
-      audioWeight: 0.65,
     };
     const response = await fetch("https://api.sunoapi.org/api/v1/generate", {
       method: "POST",
