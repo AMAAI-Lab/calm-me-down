@@ -19,6 +19,7 @@ import BrokenHealthKit, {
   HealthKitPermissions,
   HealthValue,
 } from "react-native-health";
+import { readRecords } from "react-native-health-connect";
 
 // --- 1. NATIVE MODULE FIX ---
 // This prevents the "Permissions of undefined" crash
@@ -352,4 +353,69 @@ export async function fetchGarminData(): Promise<HealthData> {
     hrv: null,
     arousal: estimateArousal(75, 6500),
   };
+}
+
+export async function fetchHealthConnectData(
+  windowMinutes: number = 5,
+): Promise<HealthData> {
+  const startDate = getMinutesAgoISO(windowMinutes);
+
+  const timeRange = {
+    operator: "between" as const,
+    startTime: startDate,
+    endTime: new Date().toISOString(),
+  };
+
+  // Steps
+  let steps: number | undefined;
+  try {
+    const result = await readRecords("Steps", { timeRangeFilter: timeRange });
+    const total = result.records.reduce((sum, r) => sum + r.count, 0);
+    if (total > 0) steps = total;
+  } catch (err: any) {
+    console.error("Error fetching Steps through Health Connect:", err?.message);
+  }
+
+  // Heart Rate (daily average)
+  let heartRate: number | undefined;
+  try {
+    const result = await readRecords("HeartRate", {
+      timeRangeFilter: timeRange,
+    });
+    const samples = result.records.flatMap((r) =>
+      r.samples.map((s) => s.beatsPerMinute),
+    );
+    if (samples.length > 0) {
+      heartRate = Math.round(
+        samples.reduce((a, b) => a + b, 0) / samples.length,
+      );
+    }
+  } catch (err: any) {
+    console.error(
+      "Error fetching Heart rate through Health Connect:",
+      err?.message,
+    );
+  }
+
+  // Heart Rate Variability (HRV)
+  let hrv: number | undefined;
+  try {
+    const result = await readRecords("HeartRateVariabilityRmssd", {
+      timeRangeFilter: timeRange,
+    });
+    if (result.records.length > 0) {
+      hrv = parseFloat(
+        (
+          result.records.reduce((s, r) => s + r.heartRateVariabilityMillis, 0) /
+          result.records.length
+        ).toFixed(1),
+      );
+    }
+  } catch (err: any) {
+    console.error("Error fetching HRV through Health Connect:", err?.message);
+  }
+
+  console.log("Health stats from Health connect:", { steps, heartRate, hrv });
+
+  return { steps, heartRate, hrv } as HealthData;
 }

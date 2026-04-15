@@ -21,11 +21,15 @@
         "NSHealthShareUsageDescription": "This app requires access to your health data to analyze your heart rate and steps.",
         "NSHealthUpdateUsageDescription": "This app writes data to HealthKit.",
         "NSLocationWhenInUseUsageDescription": "This app uses your location to personalize song lyrics based on where you are.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "LSApplicationQueriesSchemes": [
+          "spotify"
+        ]
       },
       "entitlements": {
         "com.apple.developer.healthkit": true
-      }
+      },
+      "appleTeamId": "9RMW82543P"
     },
     "android": {
       "adaptiveIcon": {
@@ -34,9 +38,19 @@
       },
       "permissions": [
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_HEART_RATE",
+        "android.permission.health.READ_HEART_RATE_VARIABILITY"
       ],
-      "package": "com.geeta.emotionapp"
+      "package": "com.geeta.emotionapp",
+      "shrinkResources": true,
+      "intentFilters": [],
+      "queries": [
+        {
+          "package": "com.spotify.music"
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
@@ -48,10 +62,18 @@
         {
           "ios": {
             "deploymentTarget": "17.0"
+          },
+          "android": {
+            "minSdkVersion": 26,
+            "enableProguardInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "enableMinifyInReleaseBuilds": true
           }
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      "react-native-health-connect",
+      "expo-asset"
     ],
     "extra": {
       "router": {},

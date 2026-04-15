@@ -1,13 +1,13 @@
-import { UserProfile } from "@/constants/appConstants";
 import { db } from "@/config/firebase";
+import { UserProfile } from "@/constants/appConstants";
 import {
-  doc,
-  setDoc,
-  serverTimestamp,
-  collection,
   addDoc,
-  updateDoc,
+  collection,
+  doc,
   increment,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
 } from "firebase/firestore";
 
 export const saveUserInDB = async (user: UserProfile) => {
@@ -29,27 +29,32 @@ export const saveUserInDB = async (user: UserProfile) => {
 export const createMusicSession = async (
   userId: string | null,
   info: object,
+  isParticipant: boolean = false,
 ) => {
   // info: {
   //   emotionPath: [],
   //   userDetails: {},
   //   lyricPrompt: '',
   //   songPrompt: '',
+  //   hrvUtilized: true,
   // }
 
   try {
     if (!userId) {
-      console.warn("Missing User-ID while creating session!");
+      console.log("Missing User-ID while creating session!");
       return null;
     }
 
-    const sessionRef = collection(db, "musicSessions", userId, "sessions");
+    const rootCollection = !isParticipant
+      ? "musicSessions"
+      : "testMusicSessions";
+    const sessionRef = collection(db, rootCollection, userId, "sessions");
     const docRef = await addDoc(sessionRef, {
       ...info,
       createdAt: serverTimestamp(),
     });
 
-    console.log("Successfully created session in DB: ", info);
+    console.log("Successfully created session in DB");
     return docRef.id;
   } catch (err) {
     console.error("Failed to create music session:", err);
@@ -62,10 +67,16 @@ export const addTrackToSession = async (
   sessionId: string | null,
   songIdx: number,
   track: object,
+  isParticipant: boolean = false,
 ) => {
   // track: {
   //   mood: '',
   //   streamUrl: '',
+  //   lyrics: '',
+  //   lyricsPrompt: '',
+  //   heartRate: '',
+  //   steps: '',
+  //   hrvMetrics: '',
   // }
   try {
     if (!userId || !sessionId) {
@@ -73,15 +84,18 @@ export const addTrackToSession = async (
         !userId && "User-ID",
         !sessionId && "Session-ID",
       ].filter(Boolean);
-      console.warn(
-        `Missing ${missingFields.join(", ")} while updating adding track in session!`,
+      console.log(
+        `Missing ${missingFields.join(", ")} while adding track in session!`,
       );
       return null;
     }
 
+    const rootCollection = !isParticipant
+      ? "musicSessions"
+      : "testMusicSessions";
     const tracksRef = collection(
       db,
-      "musicSessions",
+      rootCollection,
       userId,
       "sessions",
       sessionId,
@@ -92,7 +106,7 @@ export const addTrackToSession = async (
       createdAt: serverTimestamp(),
     });
 
-    console.log("Successfully added track in DB: ", track);
+    console.log("Successfully added track in a session in DB");
     return { id: docRef.id, songIdx };
   } catch (err) {
     console.error("Add session track failed:", err);
@@ -105,6 +119,7 @@ export const updateTrackFields = async (
   sessionId: string | null,
   trackId: string | null,
   updates: any,
+  isParticipant: boolean = false,
 ) => {
   // updates: {
   //   finalAudioUrl: "",
@@ -119,15 +134,18 @@ export const updateTrackFields = async (
         !sessionId && "Session-ID",
         !trackId && "Track-ID",
       ].filter(Boolean);
-      console.warn(
+      console.log(
         `Missing ${missingFields.join(", ")} while updating track fields!`,
       );
       return;
     }
 
+    const rootCollection = !isParticipant
+      ? "musicSessions"
+      : "testMusicSessions";
     const trackRef = doc(
       db,
-      "musicSessions",
+      rootCollection,
       userId,
       "sessions",
       sessionId,
@@ -144,8 +162,23 @@ export const updateTrackFields = async (
     }
 
     await updateDoc(trackRef, { ...updatedDocument });
-    console.log("Successfully updated track with fields: ", updates);
+    console.log("Successfully updated track fields in DB");
   } catch (err) {
-    console.error("Update session track failed:", err);
+    console.error("Update track fields failed:", err);
+  }
+};
+
+export const storeFeedback = async (userId: string | null, info: object) => {
+  try {
+    if (!userId) {
+      console.log(`Missing User ID while updating track fields!`);
+      return;
+    }
+
+    const feedbackRef = collection(db, "userFeedback", userId, "feedbacks");
+    await addDoc(feedbackRef, { ...info, createdAt: serverTimestamp() });
+    console.log("Successfully added Feedback!");
+  } catch (err) {
+    console.error("Add feedback error:", err);
   }
 };

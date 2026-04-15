@@ -1,30 +1,25 @@
 import { documentDirectory, downloadAsync } from "expo-file-system/legacy";
 import { Alert } from "react-native";
-import { ENV } from "@/config/env";
 import {
   CURRENT_LYRICS_PROVIDER,
   CURRENT_SONG_PROVIDER,
   LYRICS_PROVIDERS,
   LyricsProviderType,
+  SPOTIFY_BASE_URL,
+  SpotifyTrack,
   SUNO_ORG_PAYLOAD,
 } from "@/constants/appConstants";
 
-// --- CONFIGURATION ---
-
 // --- API KEYS & CONSTANTS ---
-// const CLAUDE_API_KEY = process.env.EXPO_PUBLIC_CLAUDE_API_KEY;
-// const PPLX_API_KEY = process.env.EXPO_PUBLIC_PPLX_API_KEY;
-// const SUNO_API_KEY = process.env.EXPO_PUBLIC_SUNO_API_KEY;
-// const SUNO_ORG_API_KEY = process.env.EXPO_PUBLIC_SUNO_ORG_API_KEY;
-// const REPLICATE_API_KEY = process.env.EXPO_PUBLIC_REPLICATE_API_KEY;
-
 const OPEN_AI_API_KEY = process.env.EXPO_PUBLIC_OPEN_AI_API_KEY;
 const GROK_API_KEY = process.env.EXPO_PUBLIC_GROK_API_KEY;
-const CLAUDE_API_KEY = ENV.CLAUDE_API_KEY;
-const PPLX_API_KEY = ENV.PPLX_API_KEY;
-const SUNO_API_KEY = ENV.SUNO_API_KEY;
-const SUNO_ORG_API_KEY = ENV.SUNO_ORG_API_KEY;
-const REPLICATE_API_KEY = ENV.REPLICATE_API_KEY;
+const CLAUDE_API_KEY = process.env.EXPO_PUBLIC_CLAUDE_API_KEY;
+const PPLX_API_KEY = process.env.EXPO_PUBLIC_PPLX_API_KEY;
+const SUNO_API_KEY = process.env.EXPO_PUBLIC_SUNO_API_KEY;
+const SUNO_ORG_API_KEY = process.env.EXPO_PUBLIC_SUNO_ORG_API_KEY;
+const REPLICATE_API_KEY = process.env.EXPO_PUBLIC_REPLICATE_API_KEY;
+const SPOTIFY_CLIENT_ID = process.env.EXPO_PUBLIC_SPOTIFY_CLIENT_ID;
+const SPOTIFY_CLIENT_SECRET = process.env.EXPO_PUBLIC_SPOTIFY_CLIENT_SECRET;
 
 const SUNO_URL_CREATE = "https://api.musicapi.ai/api/v1/sonic/create";
 const SUNO_URL_TASK = "https://api.musicapi.ai/api/v1/sonic/task";
@@ -105,7 +100,15 @@ function extractLyrics(text: string) {
   try {
     const cleaned = (text || "").replace(/```json\n/, "").replace(/\n```$/, "");
     const parsed = JSON.parse(cleaned);
-    const lyrics = Object.values(parsed.lyrics).join("\n\n");
+
+    // const lyrics = Object.values(parsed.lyrics).join("\n\n");
+    const { verse1, chorus, verse2, outro } = parsed.lyrics;
+    const lyrics = [
+      `[Verse]\n${verse1}`,
+      `[Chorus]\n${chorus}`,
+      `[Verse]\n${verse2}`,
+      `[Outro]\n${outro}`,
+    ].join("\n\n");
 
     return lyrics;
   } catch (error: any) {
@@ -177,7 +180,8 @@ async function generateWithClaude(prompt: string): Promise<string | null> {
       },
       body: JSON.stringify({
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 1024,
+        // max_tokens: 1024,
+        max_tokens: 512,
         model: "claude-opus-4-6",
       }),
     });
@@ -281,13 +285,15 @@ export async function generateSong(
   style: string,
   mood: string,
   index?: number,
+  genres?: string,
+  artists?: string,
 ): Promise<GeneratedSong | null> {
   console.log(` SERVICE: Starting Generation using [${CURRENT_SONG_PROVIDER}]`);
   console.log(` Lyrics snippet: "${lyrics.substring(0, 30)}..."`);
 
   switch (CURRENT_SONG_PROVIDER) {
     case "SUNO_ORG":
-      return await generateWithSunoOrg(lyrics, style, mood);
+      return await generateWithSunoOrg(lyrics, style, mood, genres, artists);
     case "SUNO":
       return await generateWithSuno(lyrics, style, mood);
     case "REPLICATE":
@@ -300,10 +306,39 @@ export async function generateSong(
 // =================================================================
 // 1_1. SUNO_ORG PROVIDER (MusicAPI.ai)
 // =================================================================
+
+function buildSunoOrgPayload(lyrics: string, genres: string, artists: string) {
+  const artistsArr = artists
+    .split(",")
+    .map((a) => a.trim())
+    .filter(Boolean);
+
+  const styleHeader = [
+    genres?.length ? `Style: ${genres}.` : "",
+    artists?.length
+      ? `Artists: ${artistsArr.map((a) => `${a}-style`).join(", ")}.`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const prompt = styleHeader?.length ? `${styleHeader}\n${lyrics}` : lyrics;
+
+  return {
+    ...SUNO_ORG_PAYLOAD,
+    vocalGender: Math.random() < 0.5 ? "m" : "f",
+    callBackUrl: "https://api.example.com/callback",
+    title: "Your Personal Playlist",
+    prompt,
+  };
+}
+
 async function generateWithSunoOrg(
   lyrics: string,
   style: string,
   mood: string,
+  genres?: string,
+  artists?: string,
 ): Promise<GeneratedSong | null> {
   if (!SUNO_ORG_API_KEY) {
     Alert.alert("Config Error", "Missing EXPO_PUBLIC_SUNO_ORG_API_KEY");
@@ -313,12 +348,17 @@ async function generateWithSunoOrg(
   try {
     console.log("SUNO_ORG: Sending request");
     // SunoAPI.org uses 'custom' mode for specific lyrics
-    const payload = {
+    let payload = {
       ...SUNO_ORG_PAYLOAD,
       callBackUrl: "https://api.example.com/callback",
       prompt: lyrics,
       title: "Your Personal Playlist",
     };
+
+    if (genres && artists) {
+      payload = buildSunoOrgPayload(lyrics, genres, artists);
+    }
+
     const response = await fetch("https://api.sunoapi.org/api/v1/generate", {
       method: "POST",
       headers: {
@@ -399,10 +439,10 @@ async function pollSunoOrgStreamUrl(
     const status = info?.status || info?.[0]?.status;
 
     console.log(`Polling (${attempts}) Status: ${status}`);
+    const sunoData = extractSunoOrgData(info);
 
     // Stream url is ready
     if (status === "TEXT_SUCCESS") {
-      const sunoData = extractSunoOrgData(info);
       const streamable = sunoData?.find((item: any) => item.streamAudioUrl);
 
       if (streamable?.streamAudioUrl) {
@@ -420,6 +460,32 @@ async function pollSunoOrgStreamUrl(
 
         // Continue polling in background
         continueSunoOrgPolling(taskId, mood);
+        return generatedSong;
+      }
+    } else if (
+      status === "SUCCESS" ||
+      status === "FIRST_SUCCESS" ||
+      status === "completed"
+    ) {
+      const validSong = sunoData?.find(
+        (item: any) => item?.audioUrl || item?.audio_url,
+      );
+
+      if (validSong) {
+        const finalUrl = validSong.audioUrl || validSong.audio_url;
+        console.log(
+          "Suno Org Final MP3 Ready even before TEXT_SUCCESS:",
+          finalUrl,
+        );
+
+        const generatedSong: GeneratedSong = {
+          id: taskId,
+          audioUrl: finalUrl,
+          title: validSong?.title || `Generated ${mood} Track`,
+          duration: 30,
+          provider: "SUNO_ORG",
+        };
+
         return generatedSong;
       }
     }
@@ -725,6 +791,122 @@ async function generateWithMock(
   //   mood,
   //   "MOCK",
   // );
+}
+
+export function fetchSavedPlaylistTrack(index: number): GeneratedSong | null {
+  const tracks: GeneratedSong[] = [
+    {
+      id: "1",
+      audioUrl:
+        "https://prod-1.storage.jamendo.com/?trackid=547233&format=mp31&from=Fu0sazsnbue6Z8J%2BkB0lHA%3D%3D%7CyqL1nb43yACduWvqZNYx0w%3D%3D",
+      title: "Song 1",
+      duration: 30,
+      provider: "MOCK",
+    },
+    {
+      id: "2",
+      audioUrl:
+        "https://prod-1.storage.jamendo.com/?trackid=1210690&format=mp31&from=TRc2DtGKjCUn%2FyqvyMos5g%3D%3D%7CWTQt5%2FACfJ3G%2F35d1fYGFA%3D%3D",
+      title: "Song 2",
+      duration: 30,
+      provider: "MOCK",
+    },
+    {
+      id: "3",
+      audioUrl:
+        "https://prod-1.storage.jamendo.com/?trackid=1160194&format=mp31&from=geCPusZxApKCczO010RaXQ%3D%3D%7CN07GqB%2BdGtlBE94yQWMXWQ%3D%3D",
+      title: "Song 3",
+      duration: 30,
+      provider: "MOCK",
+    },
+    {
+      id: "4",
+      audioUrl:
+        "https://prod-1.storage.jamendo.com/?trackid=951448&format=mp31&from=0jlXu5dhq1qDyJVR34SXkQ%3D%3D%7Ck3t4Goh0Q2o%2FuHluw1OsAA%3D%3D",
+      title: "Song 4",
+      duration: 30,
+      provider: "MOCK",
+    },
+  ];
+
+  if (index >= tracks.length) {
+    console.warn("Index is greater than no. of saved playlist tracks: ", index);
+    return null;
+  }
+
+  const song = tracks[index];
+
+  setTimeout(() => {
+    notifyFinalReady(song.id!, song.audioUrl);
+  }, 12000);
+
+  return song;
+}
+
+// =================================================================
+// SPOTIFY UTILITIES
+// =================================================================
+export async function getSpotifyToken(): Promise<string> {
+  try {
+    const credentials = btoa(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`);
+    const res = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: "grant_type=client_credentials",
+    });
+    const data = await res.json();
+
+    if (data?.error) {
+      throw new Error(data?.error);
+    }
+    return data?.access_token || "";
+  } catch (err: any) {
+    console.error("Error while fetching Spotify token: ", err?.message);
+    return "";
+  }
+}
+export async function fetchSpotifyTrack(
+  token: string,
+  mood: string,
+  limit = 1,
+): Promise<SpotifyTrack | null> {
+  try {
+    // const token = await getSpotifyToken();
+
+    const moodQueryMap: Record<string, string> = {
+      Calm: "calm peaceful serene ambient relaxing",
+      Comforting: "comforting warm cozy soft acoustic",
+      Hopeful: "hopeful uplifting inspiring motivational",
+      Upbeat: "upbeat energetic positive feel good pop",
+      Joyful: "joyful happy cheerful bright fun",
+    };
+
+    const searchQuery = encodeURIComponent(moodQueryMap[mood] ?? mood);
+    // console.log("spotify searchQuery: ", searchQuery);
+    const url = `${SPOTIFY_BASE_URL}/search?q=${searchQuery}&type=track&limit=${limit}`;
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Spotify search failed (${res.status}): ${errText}`);
+    }
+
+    const data = await res.json();
+    return data?.tracks?.items?.[0] || null;
+  } catch (err: any) {
+    console.error("Error fetching Spotify tracks:", err?.message);
+    return null;
+  }
 }
 
 // =================================================================
