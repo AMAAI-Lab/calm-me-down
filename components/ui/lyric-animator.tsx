@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, { useEffect, useRef, useMemo } from "react";
 import {
   Animated,
   Easing,
@@ -24,6 +24,9 @@ export interface LyricAnimatorProps {
   activeLineStyle?: TextStyle;
   pastLineStyle?: TextStyle;
   style?: ViewStyle;
+
+  currentTimeMs?: number;
+  songDurationMs?: number;
 }
 
 const splitIntoLines = (text: string) => {
@@ -109,19 +112,42 @@ export default function LyricAnimator({
   activeLineStyle,
   pastLineStyle,
   style,
+  currentTimeMs,
+  songDurationMs,
 }: LyricAnimatorProps) {
   const lines = useMemo(() => splitIntoLines(text), [text]);
 
-  const [revealedUpTo, setRevealedUpTo] = useState(-1);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Precompute durations
   const lineDurations = useMemo(() => lines.map(getLineDuration), [lines]);
 
+  const scaledDurations = useMemo(() => {
+    if (!songDurationMs) return lineDurations;
+
+    const total = lineDurations.reduce((a, b) => a + b, 0);
+
+    return lineDurations.map((d) => (d / total) * songDurationMs);
+  }, [lineDurations, songDurationMs]);
+
+  const revealedUpTo = useMemo(() => {
+    if (currentTimeMs == null) return -1;
+
+    let accumulated = 0;
+
+    for (let i = 0; i < scaledDurations.length; i++) {
+      accumulated += scaledDurations[i];
+      if (currentTimeMs < accumulated) {
+        return i;
+      }
+    }
+
+    return lines.length - 1;
+  }, [currentTimeMs, scaledDurations]);
+
   const play = () => {
     timers.current.forEach(clearTimeout);
     timers.current = [];
-    setRevealedUpTo(-1);
 
     let accumulatedDelay = 0;
 
@@ -129,7 +155,6 @@ export default function LyricAnimator({
       const delay = accumulatedDelay;
 
       const t = setTimeout(() => {
-        setRevealedUpTo(i);
         if (i === lines.length - 1) onFinish?.();
       }, delay);
 

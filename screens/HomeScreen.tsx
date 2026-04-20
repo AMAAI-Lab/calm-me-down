@@ -121,8 +121,8 @@ export default function HomeScreen() {
   const player = useAudioPlayer(currentSong?.audioUrl || "");
   const playerStatus = useAudioPlayerStatus(player);
 
-  const listenIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const generateTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const listenIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const generateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [sliderValue, setSliderValue] = useState(0);
   const [isSliding, setIsSliding] = useState(false);
 
@@ -144,7 +144,7 @@ export default function HomeScreen() {
     }
   }, [healthProvider]);
 
-  const clearStates = () => {
+  const clearStates = async () => {
     setEmotionPath([]);
     setSongQueue([]);
     setCurrentSongIndex(0);
@@ -152,6 +152,8 @@ export default function HomeScreen() {
     setDownloadedAudios({});
     setVaPath([]);
     setBioLog([]);
+    await clearSessionId();
+    await clearTrackIds();
   };
 
   const generateLyricsAndSong = async () => {
@@ -163,9 +165,7 @@ export default function HomeScreen() {
       return;
     }
 
-    clearStates();
-    await clearSessionId();
-    await clearTrackIds();
+    await clearStates();
 
     const emotionTrajectory = buildEmotionPath(
       input.currentMood,
@@ -324,7 +324,7 @@ export default function HomeScreen() {
     // Generate song lyrics
     let currentLyrics = "";
     try {
-      const lyrics = await generatelyrics(prompt);
+      const { lyrics } = (await generatelyrics(prompt)) || {};
       if (lyrics) {
         currentLyrics = lyrics;
         setGeneratedLyrics(lyrics);
@@ -658,7 +658,7 @@ export default function HomeScreen() {
     // Generate song lyrics
     let currentLyrics = "";
     try {
-      const lyrics = await generatelyrics(prompt);
+      const { lyrics } = (await generatelyrics(prompt)) || {};
       if (lyrics) {
         currentLyrics = lyrics;
       } else {
@@ -909,8 +909,12 @@ export default function HomeScreen() {
             {generatedLyrics && generatedLyrics?.length && (
               <View>
                 <Text style={styles.lyricsTitle}>Your Song</Text>
-                {/* <Text style={styles.lyricsText}>{generatedLyrics}</Text> */}
                 <LyricAnimator text={generatedLyrics} />
+                {/* <LyricAnimator
+                  text={currentLyrics}
+                  currentTimeMs={currentTime * 1000}
+                  songDurationMs={(duration || DEFAULT_DURATION) * 1000}
+                /> */}
               </View>
             )}
 

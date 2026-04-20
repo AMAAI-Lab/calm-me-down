@@ -30,6 +30,11 @@ export type UserProfile = {
   favoriteBand: string;
 };
 
+export interface LyricsResult {
+  lyrics: string;
+  musicStyle: string;
+}
+
 export const DEBUG_MODE = false;
 export const LISTEN_BEFORE_GENERATE_MS = 10000;
 export const CONTINUOUS_PLAYBACK_MS = 5000;
@@ -446,15 +451,3 @@ export const ARTISTS_BY_GENRE: Record<string, string[]> = {
     "Oasis",
   ],
 };
-
-export const SPOTIFY_BASE_URL = "https://api.spotify.com/v1";
-export interface SpotifyTrack {
-  id: string;
-  name: string;
-  uri: string;
-  artists: { name: string }[];
-  album: { name: string; images: { url: string }[] };
-  preview_url?: string | null;
-  external_urls: { spotify: string };
-  duration_ms: number;
-}

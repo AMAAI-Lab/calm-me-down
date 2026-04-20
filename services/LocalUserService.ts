@@ -4,6 +4,7 @@ import { UserProfile } from "@/constants/appConstants";
 const USER_KEY = "@user_profile";
 const SESSION_KEY = "@session_id";
 const TRACK_KEY = "@track_ids";
+const FEEDBACK_KEY = "@feedback_submitted";
 
 export const saveUserLocal = async (user: UserProfile) => {
   await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
@@ -50,4 +51,15 @@ export const getTrackId = async (idx: number): Promise<string | null> => {
 };
 export const clearTrackIds = async () => {
   await AsyncStorage.removeItem(TRACK_KEY);
+};
+
+export const saveFeedbackSubmitted = async (): Promise<void> => {
+  await AsyncStorage.setItem(FEEDBACK_KEY, "true");
+};
+export const getFeedbackSubmitted = async (): Promise<boolean> => {
+  const val = await AsyncStorage.getItem(FEEDBACK_KEY);
+  return val === "true";
+};
+export const clearFeedbackSubmitted = async (): Promise<void> => {
+  await AsyncStorage.removeItem(FEEDBACK_KEY);
 };

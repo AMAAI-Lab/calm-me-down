@@ -5,8 +5,7 @@ import {
   CURRENT_SONG_PROVIDER,
   LYRICS_PROVIDERS,
   LyricsProviderType,
-  SPOTIFY_BASE_URL,
-  SpotifyTrack,
+  LyricsResult,
   SUNO_ORG_PAYLOAD,
 } from "@/constants/appConstants";
 
@@ -18,8 +17,6 @@ const PPLX_API_KEY = process.env.EXPO_PUBLIC_PPLX_API_KEY;
 const SUNO_API_KEY = process.env.EXPO_PUBLIC_SUNO_API_KEY;
 const SUNO_ORG_API_KEY = process.env.EXPO_PUBLIC_SUNO_ORG_API_KEY;
 const REPLICATE_API_KEY = process.env.EXPO_PUBLIC_REPLICATE_API_KEY;
-const SPOTIFY_CLIENT_ID = process.env.EXPO_PUBLIC_SPOTIFY_CLIENT_ID;
-const SPOTIFY_CLIENT_SECRET = process.env.EXPO_PUBLIC_SPOTIFY_CLIENT_SECRET;
 
 const SUNO_URL_CREATE = "https://api.musicapi.ai/api/v1/sonic/create";
 const SUNO_URL_TASK = "https://api.musicapi.ai/api/v1/sonic/task";
@@ -35,6 +32,7 @@ export type GeneratedSong = {
   title?: string;
   duration?: number;
   provider: string;
+  songProviderPayload?: object;
 };
 
 type FinalReadyListener = (taskId: string, url: string) => void;
@@ -50,7 +48,9 @@ function notifyFinalReady(taskId: string, url: string) {
   }
 }
 
-export async function generatelyrics(prompt: string): Promise<string | null> {
+export async function generatelyrics(
+  prompt: string,
+): Promise<LyricsResult | null> {
   const providers: LyricsProviderType[] = [
     CURRENT_LYRICS_PROVIDER,
     ...LYRICS_PROVIDERS.filter((p) => p !== CURRENT_LYRICS_PROVIDER),
@@ -82,7 +82,7 @@ export async function generatelyrics(prompt: string): Promise<string | null> {
 async function generateWithProvider(
   provider: LyricsProviderType,
   prompt: string,
-): Promise<string | null> {
+): Promise<LyricsResult | null> {
   switch (provider) {
     case "CLAUDE":
       return await generateWithClaude(prompt);
@@ -96,7 +96,7 @@ async function generateWithProvider(
   }
 }
 
-function extractLyrics(text: string) {
+function extractLyrics(text: string): LyricsResult | null {
   try {
     const cleaned = (text || "").replace(/```json\n/, "").replace(/\n```$/, "");
     const parsed = JSON.parse(cleaned);
@@ -109,18 +109,21 @@ function extractLyrics(text: string) {
       `[Verse]\n${verse2}`,
       `[Outro]\n${outro}`,
     ].join("\n\n");
+    const musicStyle = parsed?.musicStyle || "";
 
-    return lyrics;
+    return { lyrics, musicStyle };
   } catch (error: any) {
     console.error(
       `Failed to extract lyrics from response by [${CURRENT_LYRICS_PROVIDER}]: `,
       error?.message,
     );
-    return "";
+    return null;
   }
 }
 
-async function generateWithPerplexity(prompt: string): Promise<string | null> {
+async function generateWithPerplexity(
+  prompt: string,
+): Promise<LyricsResult | null> {
   if (!PPLX_API_KEY) {
     Alert.alert(
       "API Key Missing",
@@ -161,7 +164,9 @@ async function generateWithPerplexity(prompt: string): Promise<string | null> {
   }
 }
 
-async function generateWithClaude(prompt: string): Promise<string | null> {
+async function generateWithClaude(
+  prompt: string,
+): Promise<LyricsResult | null> {
   if (!CLAUDE_API_KEY) {
     Alert.alert(
       "API Key Missing",
@@ -203,7 +208,9 @@ async function generateWithClaude(prompt: string): Promise<string | null> {
   }
 }
 
-async function generateWithOpenAi(prompt: string): Promise<string | null> {
+async function generateWithOpenAi(
+  prompt: string,
+): Promise<LyricsResult | null> {
   if (!OPEN_AI_API_KEY) {
     Alert.alert(
       "API Key Missing",
@@ -242,7 +249,7 @@ async function generateWithOpenAi(prompt: string): Promise<string | null> {
   }
 }
 
-async function generateWithGrok(prompt: string): Promise<string | null> {
+async function generateWithGrok(prompt: string): Promise<LyricsResult | null> {
   if (!GROK_API_KEY) {
     Alert.alert(
       "API Key Missing",
@@ -307,13 +314,19 @@ export async function generateSong(
 // 1_1. SUNO_ORG PROVIDER (MusicAPI.ai)
 // =================================================================
 
-function buildSunoOrgPayload(lyrics: string, genres: string, artists: string) {
+function buildSunoOrgPayload(
+  lyrics: string,
+  genres: string,
+  artists: string,
+  musicStyle: string,
+) {
   const artistsArr = artists
     .split(",")
     .map((a) => a.trim())
     .filter(Boolean);
 
   const styleHeader = [
+    musicStyle?.length ? `${musicStyle}` : "",
     genres?.length ? `Style: ${genres}.` : "",
     artists?.length
       ? `Artists: ${artistsArr.map((a) => `${a}-style`).join(", ")}.`
@@ -323,19 +336,20 @@ function buildSunoOrgPayload(lyrics: string, genres: string, artists: string) {
     .join("\n");
 
   const prompt = styleHeader?.length ? `${styleHeader}\n${lyrics}` : lyrics;
-
-  return {
+  const payload = {
     ...SUNO_ORG_PAYLOAD,
     vocalGender: Math.random() < 0.5 ? "m" : "f",
     callBackUrl: "https://api.example.com/callback",
     title: "Your Personal Playlist",
     prompt,
   };
+
+  return payload;
 }
 
 async function generateWithSunoOrg(
   lyrics: string,
-  style: string,
+  musicStyle: string,
   mood: string,
   genres?: string,
   artists?: string,
@@ -356,7 +370,7 @@ async function generateWithSunoOrg(
     };
 
     if (genres && artists) {
-      payload = buildSunoOrgPayload(lyrics, genres, artists);
+      payload = buildSunoOrgPayload(lyrics, genres, artists, musicStyle);
     }
 
     const response = await fetch("https://api.sunoapi.org/api/v1/generate", {
@@ -392,7 +406,7 @@ async function generateWithSunoOrg(
     console.log(` SUNO_ORG: Task ID: ${taskId}`);
 
     // return await pollSunoOrg(taskId, mood);
-    return await pollSunoOrgStreamUrl(taskId, mood);
+    return await pollSunoOrgStreamUrl(taskId, mood, payload);
   } catch (error: any) {
     console.error(" SUNO_ORG Error:", error);
     Alert.alert("Generation Failed", error.message);
@@ -419,6 +433,7 @@ function extractSunoOrgData(info: any) {
 async function pollSunoOrgStreamUrl(
   taskId: string,
   mood: string,
+  payload: object,
 ): Promise<GeneratedSong | null> {
   const maxAttempts = 150;
   let attempts = 0;
@@ -456,6 +471,7 @@ async function pollSunoOrgStreamUrl(
           title: streamable.title || `Generated ${mood} Track`,
           duration: 30,
           provider: "SUNO_ORG",
+          songProviderPayload: payload,
         };
 
         // Continue polling in background
@@ -484,13 +500,14 @@ async function pollSunoOrgStreamUrl(
           title: validSong?.title || `Generated ${mood} Track`,
           duration: 30,
           provider: "SUNO_ORG",
+          songProviderPayload: payload,
         };
 
         return generatedSong;
       }
     }
 
-    if (status === "FAILED") {
+    if (status === "FAILED" || status === "GENERATE_AUDIO_FAILED") {
       throw new Error("SunoOrg task failed.");
     }
   }
@@ -784,13 +801,6 @@ async function generateWithMock(
   }, 2000);
 
   return generatedSong;
-
-  // return await downloadAndSaveAudio(
-  //   TEST_SONG_URL,
-  //   `Mock-Song-${nextSongIdx}`,
-  //   mood,
-  //   "MOCK",
-  // );
 }
 
 export function fetchSavedPlaylistTrack(index: number): GeneratedSong | null {
@@ -841,72 +851,6 @@ export function fetchSavedPlaylistTrack(index: number): GeneratedSong | null {
   }, 12000);
 
   return song;
-}
-
-// =================================================================
-// SPOTIFY UTILITIES
-// =================================================================
-export async function getSpotifyToken(): Promise<string> {
-  try {
-    const credentials = btoa(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`);
-    const res = await fetch("https://accounts.spotify.com/api/token", {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${credentials}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: "grant_type=client_credentials",
-    });
-    const data = await res.json();
-
-    if (data?.error) {
-      throw new Error(data?.error);
-    }
-    return data?.access_token || "";
-  } catch (err: any) {
-    console.error("Error while fetching Spotify token: ", err?.message);
-    return "";
-  }
-}
-export async function fetchSpotifyTrack(
-  token: string,
-  mood: string,
-  limit = 1,
-): Promise<SpotifyTrack | null> {
-  try {
-    // const token = await getSpotifyToken();
-
-    const moodQueryMap: Record<string, string> = {
-      Calm: "calm peaceful serene ambient relaxing",
-      Comforting: "comforting warm cozy soft acoustic",
-      Hopeful: "hopeful uplifting inspiring motivational",
-      Upbeat: "upbeat energetic positive feel good pop",
-      Joyful: "joyful happy cheerful bright fun",
-    };
-
-    const searchQuery = encodeURIComponent(moodQueryMap[mood] ?? mood);
-    // console.log("spotify searchQuery: ", searchQuery);
-    const url = `${SPOTIFY_BASE_URL}/search?q=${searchQuery}&type=track&limit=${limit}`;
-
-    const res = await fetch(url, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Spotify search failed (${res.status}): ${errText}`);
-    }
-
-    const data = await res.json();
-    return data?.tracks?.items?.[0] || null;
-  } catch (err: any) {
-    console.error("Error fetching Spotify tracks:", err?.message);
-    return null;
-  }
 }
 
 // =================================================================
