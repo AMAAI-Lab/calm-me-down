@@ -6,22 +6,34 @@ export default function BiomarkerCard({
   value,
   numberOfLines = 1,
   customWidth = undefined,
+  variant = "column",
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   numberOfLines?: number;
   customWidth?: number;
+  variant?: "row" | "column";
 }) {
   return (
     <View
       style={[
         styles.bioCard,
         customWidth ? { width: `${customWidth}%` } : undefined,
+        variant === "row" && {
+          display: "flex",
+          flexDirection: "row",
+          justifyContent: "center",
+          alignContent: "center",
+          gap: 10,
+        },
       ]}
     >
-      {icon}
-      <Text style={styles.bioLabel}>{label}</Text>
+      <View style={styles.bioHeader}>
+        {icon}
+        <Text style={styles.bioLabel}>{label}</Text>
+      </View>
+
       <Text
         style={styles.bioValue}
         numberOfLines={numberOfLines}
@@ -42,16 +54,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#34373C",
+    gap: 5,
   },
   bioLabel: {
     color: "#aaa",
     fontSize: 12,
-    marginTop: 6,
   },
   bioValue: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
-    marginTop: 4,
+  },
+  bioHeader: {
+    display: "flex",
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
   },
 });

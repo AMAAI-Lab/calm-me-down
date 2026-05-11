@@ -37,6 +37,7 @@ export const createMusicSession = async (
   //   lyricPrompt: '',
   //   songPrompt: '',
   //   hrvUtilized: true,
+  //   playlistType: trajectory | savedPlaylist,
   // }
 
   try {
@@ -59,6 +60,41 @@ export const createMusicSession = async (
   } catch (err) {
     console.error("Failed to create music session:", err);
     return null;
+  }
+};
+
+export const updateMusicSession = async (
+  userId: string | null,
+  sessionId: string | null,
+  updates: any,
+  isParticipant: boolean = false,
+) => {
+  try {
+    if (!userId || !sessionId) {
+      const missingFields = [
+        !userId && "User-ID",
+        !sessionId && "Session-ID",
+      ].filter(Boolean);
+      console.log(
+        `Missing ${missingFields.join(", ")} while updating music session!`,
+      );
+      return;
+    }
+
+    const rootCollection = !isParticipant
+      ? "musicSessions"
+      : "testMusicSessions";
+    const sessionRef = doc(db, rootCollection, userId, "sessions", sessionId);
+
+    const updatedDocument = {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    };
+
+    await updateDoc(sessionRef, { ...updatedDocument });
+    console.log("Successfully updated music session in DB");
+  } catch (err) {
+    console.error("Update music session in DB failed:", err);
   }
 };
 

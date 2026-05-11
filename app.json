@@ -21,6 +21,8 @@
         "NSHealthShareUsageDescription": "This app requires access to your health data to analyze your heart rate and steps.",
         "NSHealthUpdateUsageDescription": "This app writes data to HealthKit.",
         "NSLocationWhenInUseUsageDescription": "This app uses your location to personalize song lyrics based on where you are.",
+        "NSBluetoothAlwaysUsageDescription": "This app uses Bluetooth to connect to your wearable device and read heart rate data.",
+        "NSBluetoothPeripheralUsageDescription": "This app uses Bluetooth to connect to your wearable device.",
         "ITSAppUsesNonExemptEncryption": false,
         "LSApplicationQueriesSchemes": [
           "spotify"
@@ -45,12 +47,7 @@
       ],
       "package": "com.geeta.emotionapp",
       "shrinkResources": true,
-      "intentFilters": [],
-      "queries": [
-        {
-          "package": "com.spotify.music"
-        }
-      ]
+      "intentFilters": []
     },
     "web": {
       "favicon": "./assets/images/favicon.png"

@@ -5,6 +5,14 @@ const USER_KEY = "@user_profile";
 const SESSION_KEY = "@session_id";
 const TRACK_KEY = "@track_ids";
 const FEEDBACK_KEY = "@feedback_submitted";
+const SESSION_FEEDBACK_KEY = "@session_feedback";
+const DEVICE_ID_KEY = "@ble_hr_device_id";
+
+
+export interface FeedbackSubmittedStatus {
+  pre: boolean;
+  post: boolean;
+}
 
 export const saveUserLocal = async (user: UserProfile) => {
   await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
@@ -53,13 +61,54 @@ export const clearTrackIds = async () => {
   await AsyncStorage.removeItem(TRACK_KEY);
 };
 
-export const saveFeedbackSubmitted = async (): Promise<void> => {
-  await AsyncStorage.setItem(FEEDBACK_KEY, "true");
+// Methods to mutate feedback submission value
+export const saveFeedbackSubmitted = async (
+  type: "pre" | "post",
+  sessionIdx: number,
+): Promise<void> => {
+  const feedbackSubmittedMap = (await getFeedbackSubmitted()) || {};
+  const currFeedbackStatus = feedbackSubmittedMap?.[sessionIdx] || {
+    pre: false,
+    post: false,
+  };
+  currFeedbackStatus[type] = true;
+
+  const newFeedbackMap = {
+    ...feedbackSubmittedMap,
+    [sessionIdx]: currFeedbackStatus,
+  };
+  await AsyncStorage.setItem(
+    FEEDBACK_KEY,
+    JSON.stringify({ ...newFeedbackMap }),
+  );
 };
-export const getFeedbackSubmitted = async (): Promise<boolean> => {
-  const val = await AsyncStorage.getItem(FEEDBACK_KEY);
-  return val === "true";
+export const getFeedbackSubmitted = async (): Promise<Record<
+  number,
+  FeedbackSubmittedStatus
+> | null> => {
+  const raw = await AsyncStorage.getItem(FEEDBACK_KEY);
+  return raw ? JSON.parse(raw) : null;
 };
 export const clearFeedbackSubmitted = async (): Promise<void> => {
   await AsyncStorage.removeItem(FEEDBACK_KEY);
+};
+
+// Methods to mutate Participants Music Sessions Feedback
+export const saveSessionFeedback = async (feedback: object) => {
+  await AsyncStorage.setItem(SESSION_FEEDBACK_KEY, JSON.stringify(feedback));
+};
+export const getSessionFeedback = async (): Promise<object | null> => {
+  const raw = await AsyncStorage.getItem(SESSION_FEEDBACK_KEY);
+  return raw ? JSON.parse(raw) : null;
+};
+export const clearSessionFeedback = async () => {
+  await AsyncStorage.removeItem(SESSION_FEEDBACK_KEY);
+};
+
+// Methods to mutate device id used in BLE
+export const saveDeviceId = async (id: string) => {
+  await AsyncStorage.setItem(DEVICE_ID_KEY, id);
+};
+export const getSavedDeviceId = async () => {
+  return await AsyncStorage.getItem(DEVICE_ID_KEY);
 };

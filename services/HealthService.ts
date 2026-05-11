@@ -6,6 +6,7 @@ import {
   AROUSAL_HRV_HIGH_THRESHOLD,
   AROUSAL_HRV_LOW_THRESHOLD,
   AROUSAL_STEPS_ACTIVITY_CEILING,
+  EMOTION_TEMPO_MAP,
   EmotionPoint,
   HeartRateSample,
   HRV_APP_VERSION,
@@ -231,6 +232,8 @@ export async function fetchAppleHealthData(
         } else {
           console.log(
             `HR: ${results.length} samples in last ${windowMinutes} min`,
+            // log all samples
+
           );
           results.forEach((r, i) => {
             console.log(` [${i}] ${r.value} bpm at ${r.startDate}`);
@@ -419,3 +422,26 @@ export async function fetchHealthConnectData(
 
   return { steps, heartRate, hrv } as HealthData;
 }
+
+export const computeTempoRange = (
+  mood: string,
+  hr: number,
+  resting = 60,
+  max = 180,
+): number[] => {
+  // @ts-ignore
+  const baseRange = EMOTION_TEMPO_MAP?.[mood.toLowerCase()] || [60, 75];
+  if (!hr || hr <= 0) {
+    return baseRange;
+  }
+
+  const norm = Math.max(0, Math.min(1, (hr - resting) / (max - resting)));
+
+  const [minTempo, maxTempo] = baseRange;
+  const span = maxTempo - minTempo;
+
+  const shift = span * 0.3 * (norm - 0.5);
+  // -15% to +15% adjustment
+
+  return [Math.round(minTempo + shift), Math.round(maxTempo + shift)];
+};

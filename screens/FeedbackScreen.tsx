@@ -1,6 +1,13 @@
+import { ScaleRating } from "@/components/ui/arousal-valence-feedback";
 import { useAuth } from "@/context/AuthContext";
-import { storeFeedback } from "@/services/DbService";
-import { saveFeedbackSubmitted } from "@/services/LocalUserService";
+import { updateMusicSession } from "@/services/DbService";
+import {
+  clearSessionFeedback,
+  getSessionId,
+  saveFeedbackSubmitted,
+  saveSessionFeedback,
+} from "@/services/LocalUserService";
+import { useRoute } from "@react-navigation/native";
 import { useNavigation } from "expo-router";
 import React, { useState, useRef } from "react";
 import {
@@ -14,257 +21,28 @@ import {
   Platform,
   KeyboardAvoidingView,
   StatusBar,
-  PanResponder,
-  Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const SCREEN_WIDTH = Dimensions.get("window").width;
-const TRACK_WIDTH = SCREEN_WIDTH - 40 - 40;
-const THUMB_SIZE = 28;
-const STEPS = 5; // 1–5
-
-function ScaleRating({
-  value,
-  onChange,
-  lowLabel = "Not at all",
-  highLabel = "Very much",
+export function Card({
+  label,
+  icon,
+  children,
 }: {
-  value: number;
-  onChange: (v: number) => void;
-  lowLabel?: string;
-  highLabel?: string;
+  label?: string;
+  icon?: string;
+  children: React.ReactNode;
 }) {
-  const positionForValue = (v: number) =>
-    v > 0 ? ((v - 1) / (STEPS - 1)) * (TRACK_WIDTH - THUMB_SIZE) : 0;
-
-  const pan = useRef(
-    new Animated.Value(value > 0 ? positionForValue(value) : 0),
-  ).current;
-  const isDragging = useRef(false);
-
-  const snapToStep = (x: number): number => {
-    const clamped = Math.max(0, Math.min(x, TRACK_WIDTH - THUMB_SIZE));
-    const ratio = clamped / (TRACK_WIDTH - THUMB_SIZE);
-    return Math.round(ratio * (STEPS - 1)) + 1;
-  };
-
-  const snapAnimTo = (v: number) => {
-    Animated.spring(pan, {
-      toValue: positionForValue(v),
-      useNativeDriver: false,
-      speed: 30,
-      bounciness: 6,
-    }).start();
-  };
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (_, gs) => {
-        isDragging.current = true;
-        // @ts-ignore
-        pan.setOffset(pan._value);
-        pan.setValue(0);
-      },
-      onPanResponderMove: (_, gs) => {
-        // @ts-ignore
-        const raw = pan._offset + gs.dx;
-        const clamped = Math.max(0, Math.min(raw, TRACK_WIDTH - THUMB_SIZE));
-        pan.setValue(clamped - (pan as any)._offset);
-        const stepped = snapToStep(clamped);
-        onChange(stepped);
-      },
-      onPanResponderRelease: (_, gs) => {
-        pan.flattenOffset();
-        // @ts-ignore
-        const stepped = snapToStep((pan as any)._value);
-        onChange(stepped);
-        snapAnimTo(stepped);
-        isDragging.current = false;
-      },
-    }),
-  ).current;
-
-  // Tap directly on the track to jump
-  const handleTrackTap = (e: any) => {
-    const tapX = e.nativeEvent.locationX - THUMB_SIZE / 2;
-    const stepped = snapToStep(tapX);
-    onChange(stepped);
-    snapAnimTo(stepped);
-  };
-
-  const STEP_LABELS = ["1", "2", "3", "4", "5"];
-
-  const fillWidth = pan.interpolate({
-    inputRange: [0, TRACK_WIDTH - THUMB_SIZE],
-    outputRange: [THUMB_SIZE / 2, TRACK_WIDTH - THUMB_SIZE / 2],
-    extrapolate: "clamp",
-  });
-
   return (
-    <View style={sliderStyles.wrapper}>
-      <View style={sliderStyles.trackContainer} onTouchEnd={handleTrackTap}>
-        <View style={sliderStyles.trackBg} />
-
-        {value > 0 && (
-          <Animated.View
-            style={[sliderStyles.trackFill, { width: fillWidth }]}
-          />
-        )}
-
-        {/* Step dots */}
-        {STEP_LABELS.map((_, i) => {
-          const dotX =
-            (i / (STEPS - 1)) * (TRACK_WIDTH - THUMB_SIZE) + THUMB_SIZE / 2 - 4;
-          const isActive = value > 0 && i < value;
-          return (
-            <View
-              key={i}
-              style={[
-                sliderStyles.stepDot,
-                { left: dotX },
-                isActive && sliderStyles.stepDotActive,
-              ]}
-            />
-          );
-        })}
-
-        {/* Thumb */}
-        <Animated.View
-          style={[
-            sliderStyles.thumb,
-            { left: pan, opacity: value > 0 ? 1 : 0.35 },
-          ]}
-          {...panResponder.panHandlers}
-        >
-          <View style={sliderStyles.thumbInner} />
-        </Animated.View>
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        {icon && <Text style={styles.cardIcon}>{icon}</Text>}
+        <Text style={styles.cardLabel}>{label}</Text>
       </View>
-
-      {/* Step number labels */}
-      <View style={sliderStyles.stepLabelsRow}>
-        {STEP_LABELS.map((lbl, i) => (
-          <Text
-            key={i}
-            style={[
-              sliderStyles.stepLabel,
-              value === i + 1 && sliderStyles.stepLabelActive,
-            ]}
-          >
-            {lbl}
-          </Text>
-        ))}
-      </View>
-
-      {/* Axis labels */}
-      <View style={sliderStyles.axisRow}>
-        <Text style={sliderStyles.axisLabel}>{lowLabel}</Text>
-        <Text style={sliderStyles.axisLabel}>{highLabel}</Text>
-      </View>
-
-      {/* Hint */}
-      {value > 0 && (
-        <Text style={sliderStyles.hint}>
-          {
-            [
-              "1 — Not at all",
-              "2 — Slightly",
-              "3 — Somewhat",
-              "4 — Quite",
-              "5 — Very much",
-            ][value - 1]
-          }
-        </Text>
-      )}
+      {children}
     </View>
   );
 }
-const sliderStyles = StyleSheet.create({
-  wrapper: { gap: 8, paddingTop: 8 },
-  trackContainer: {
-    width: TRACK_WIDTH,
-    height: 40,
-    justifyContent: "center",
-  },
-  trackBg: {
-    position: "absolute",
-    left: THUMB_SIZE / 2,
-    right: THUMB_SIZE / 2,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#1E1535",
-  },
-  trackFill: {
-    position: "absolute",
-    left: THUMB_SIZE / 2,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#C4417A",
-  },
-  stepDot: {
-    position: "absolute",
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#2A1F40",
-    top: 16,
-  },
-  stepDotActive: {
-    backgroundColor: "#C4417A",
-  },
-  thumb: {
-    position: "absolute",
-    width: THUMB_SIZE,
-    height: THUMB_SIZE,
-    borderRadius: THUMB_SIZE / 2,
-    backgroundColor: "#C4417A",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#C4417A",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.5,
-    shadowRadius: 6,
-    elevation: 5,
-  },
-  thumbInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#fff",
-  },
-  stepLabelsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: THUMB_SIZE / 2 - 4,
-  },
-  stepLabel: {
-    color: "#3D2F5A",
-    fontSize: 12,
-    fontWeight: "600",
-    width: 16,
-    textAlign: "center",
-  },
-  stepLabelActive: {
-    color: "#C4417A",
-  },
-  axisRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 2,
-  },
-  axisLabel: {
-    color: "#4A3860",
-    fontSize: 11,
-  },
-  hint: {
-    color: "#C4417A",
-    fontSize: 13,
-    fontStyle: "italic",
-    marginTop: 2,
-  },
-});
 
 const THREE_OPTIONS = [
   { label: "Not really", icon: "✕" },
@@ -362,33 +140,16 @@ const tapStyles = StyleSheet.create({
   },
 });
 
-function Card({
-  label,
-  icon,
-  children,
-}: {
-  label: string;
-  icon: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardIcon}>{icon}</Text>
-        <Text style={styles.cardLabel}>{label}</Text>
-      </View>
-      {children}
-    </View>
-  );
-}
-
 // Main Screen Component
 export default function FeedbackScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
+  const route = useRoute();
 
-  const [moodNow, setMoodNow] = useState(0);
-  const [moodShift, setMoodShift] = useState(0);
+  const { storeInDb = false, sessionIdx = 0 } = (route?.params || {}) as never;
+
+  const [arousal, setArousal] = useState(0);
+  const [valence, setValence] = useState(0);
   const [engaging, setEngaging] = useState(0);
   const [personal, setPersonal] = useState(0);
   const [targetMood, setTargetMood] = useState(-1);
@@ -400,39 +161,59 @@ export default function FeedbackScreen() {
   const scaleAnim = useRef(new Animated.Value(0.85)).current;
 
   const canSubmit =
-    moodNow > 0 &&
-    moodShift > 0 &&
+    arousal > 0 &&
+    valence > 0 &&
     engaging > 0 &&
     personal > 0 &&
     targetMood >= 0;
 
   const handleSubmit = async () => {
-    if (!canSubmit) return;
+    try {
+      if (!canSubmit) return;
 
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        useNativeDriver: true,
-        speed: 12,
-      }),
-    ]).start();
-    setSubmitted(true);
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          useNativeDriver: true,
+          speed: 12,
+        }),
+      ]).start();
+      setSubmitted(true);
 
-    storeFeedback(user?.email!, {
-      moodNow,
-      moodShift,
-      engaging,
-      personal,
-      targetMood: targetMood + 1,
-      review,
-    });
+      const feedbackData = {
+        arousal,
+        valence,
+        engaging,
+        personal,
+        targetMood: targetMood + 1,
+        review,
+      };
 
-    await saveFeedbackSubmitted();
+      if (!storeInDb) {
+        await saveSessionFeedback(feedbackData);
+        await saveFeedbackSubmitted("pre", sessionIdx || 0);
+      } else {
+        const sessionId = await getSessionId();
+        await updateMusicSession(
+          user?.email!,
+          sessionId,
+          {
+            feedbackAfter: feedbackData,
+          },
+          true,
+        );
+
+        await clearSessionFeedback();
+        await saveFeedbackSubmitted("post", sessionIdx || 0);
+      }
+    } catch (err: any) {
+      console.error("Error while saving session feedback in DB:", err?.message);
+    }
   };
 
   const handleGoBack = () => {
@@ -441,6 +222,14 @@ export default function FeedbackScreen() {
     } else {
       navigation.navigate("Participants" as never);
     }
+  };
+
+  const populateForm = () => {
+    setArousal(5);
+    setValence(5);
+    setEngaging(5);
+    setPersonal(5);
+    setTargetMood(2);
   };
 
   if (submitted) {
@@ -520,7 +309,6 @@ export default function FeedbackScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Header */}
           <View style={styles.header}>
             <View style={styles.badge}>
               <Text style={styles.badgeText}>FEEDBACK</Text>
@@ -531,52 +319,70 @@ export default function FeedbackScreen() {
             </Text>
           </View>
 
-          {/* Q1 */}
-          <Card label="How do you feel right now?" icon="🧠">
+          <Card label="Your Energy & Happiness level right now?">
+            <View style={styles.dualSliderRow}>
+              <Text style={styles.dualSliderTitle}>⚡ Energy</Text>
+              <Text style={styles.dualSliderSub}>Very Low → Very High</Text>
+            </View>
             <ScaleRating
-              value={moodNow}
-              onChange={setMoodNow}
-              lowLabel="Very low"
-              highLabel="Very good"
+              value={arousal}
+              onChange={setArousal}
+              hints={[
+                "1 — Very low",
+                "2 ",
+                "3 ",
+                "4 ",
+                "5 ",
+                "6 ",
+                "7 - Very High"
+              ]}
+              isParticipantsScreen={false}
+            />
+
+            <View style={styles.dualDivider} />
+
+            <View style={styles.dualSliderRow}>
+              <Text style={styles.dualSliderTitle}>☀️ Pleasant / Positive Mood</Text>
+              <Text style={styles.dualSliderSub}>Very Unpleasant/negative → Very Pleasant/ positive</Text>
+            </View>
+            <ScaleRating
+              value={valence}
+              onChange={setValence}
+              hints={[
+                "1 — Very sad",
+                "2 — Sad",
+                "3 — Neutral",
+                "4 — Happy",
+                "5 — Very happy",
+              ]}
+              isParticipantsScreen={false}
             />
           </Card>
 
-          {/* Q2 */}
-          <Card label="Did the music help shift your mood?" icon="🎵">
-            <ScaleRating
-              value={moodShift}
-              onChange={setMoodShift}
-              lowLabel="Not at all"
-              highLabel="Absolutely"
-            />
-          </Card>
-
-          {/* Q3 */}
           <Card label="How engaging were the songs?" icon="🎧">
             <ScaleRating
               value={engaging}
               onChange={setEngaging}
               lowLabel="Boring"
               highLabel="Captivating"
+              isParticipantsScreen={false}
             />
           </Card>
 
-          {/* Q4 */}
           <Card label="Did the songs feel personal?" icon="💜">
             <ScaleRating
               value={personal}
               onChange={setPersonal}
               lowLabel="Generic"
               highLabel="Just for me"
+              isParticipantsScreen={false}
             />
           </Card>
 
-          {/* Q5 */}
           <Card label="Did you reach your target mood?" icon="🎯">
             <ThreeTap value={targetMood} onChange={setTargetMood} />
           </Card>
 
-          {/* Q6 */}
           <Card label="Tell us more (optional)" icon="💬">
             <TextInput
               style={styles.textInput}
@@ -610,6 +416,15 @@ export default function FeedbackScreen() {
                 : "Please rate all the required sections"}
             </Text>
           </TouchableOpacity>
+
+          {process.env?.EXPO_PUBLIC_APP_ENV === "development" && (
+            <TouchableOpacity
+              onPress={() => populateForm()}
+              style={[styles.submitBtn, { marginTop: 20 }]}
+            >
+              <Text style={styles.submitText}>Populate Form</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -766,5 +581,27 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: 15,
     letterSpacing: 0.3,
+  },
+  dualSliderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: -4,
+  },
+  dualSliderTitle: {
+    color: "#E0D0FF",
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
+  dualSliderSub: {
+    color: "#4A3860",
+    fontSize: 11,
+    fontStyle: "italic",
+  },
+  dualDivider: {
+    height: 1,
+    backgroundColor: "#1E1535",
+    marginVertical: 4,
   },
 });

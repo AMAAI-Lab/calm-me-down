@@ -66,7 +66,7 @@ export default function MoodCard({
         >
           {isCalm ? "Calm" : "Joyful"}
         </Text>
-        <Text style={styles.moodArrow}>→ {isCalm ? "Joyful" : "Calm"}</Text>
+        {/* <Text style={styles.moodArrow}>→ {isCalm ? "Joyful" : "Calm"}</Text> */}
 
         {selected && (
           <View style={[styles.moodCheckBadge, { backgroundColor: color }]}>

@@ -134,6 +134,13 @@ export const ADAPTATION_INTENSIFY_THRESHOLD = 0.15; // bio arousal this much bel
 
 // Fallback VA coordinate when start/end emotion cannot be resolved
 export const PATH_FALLBACK_VA = { valence: 0, arousal: 0.5 };
+export const DEFAULT_HEALTH_DATA = {
+  heartRate: 75,
+  steps: 0,
+  hrv: null,
+  arousal: null,
+  heartRateSamples: [],
+};
 
 //SUNO ORG payload
 export const SUNO_ORG_PAYLOAD = {
@@ -451,3 +458,35 @@ export const ARTISTS_BY_GENRE: Record<string, string[]> = {
     "Oasis",
   ],
 };
+
+export const SHOW_LYRICS = true;
+
+export const EMOTION_TEMPO_MAP = {
+  calm: [60, 75],
+  comforting: [70, 90],
+  hopeful: [85, 110],
+  joyful: [105, 135],
+};
+
+export const MOCK_LYRICS = `
+  Line 1 of the mock lyrics
+  Line 2 of the mock lyrics
+  Line 3 of the mock lyrics
+  Line 4 of the mock lyrics
+
+  Line 5 of the mock lyrics
+  Line 6 of the mock lyrics
+  Line 7 of the mock lyrics
+  Line 8 of the mock lyrics
+  
+  Line 9 of the mock lyrics
+  Line 10 of the mock lyrics
+  Line 11 of the mock lyrics
+  Line 12 of the mock lyrics
+`;
+export const EMOTION_GRID: string[][] = [
+  ["Fearful", "Angry", "Anxious", "Frustrated"],
+  ["Excited", "Energetic", "Hopeful", "Cheerful"],
+  ["Sad", "Lonely", "Helpless", "Bored"],
+  ["Gentle", "Relaxed", "Comforting", "Peaceful"],
+];

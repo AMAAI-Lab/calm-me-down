@@ -22,7 +22,7 @@ export default function EmotionDropdown({
   disableSearch = false,
   error,
 }: {
-  label: string;
+  label?: string;
   value: string;
   placeholder: string;
   moods: string[];
@@ -84,7 +84,8 @@ export default function EmotionDropdown({
   return (
     <View style={{ marginBottom: 16 }}>
       <Pressable onPress={() => setOpen(true)}>
-        <Text style={styles.label}>{label}</Text>
+        {!!label && <Text style={styles.label}>{label}</Text>}
+
         <View
           pointerEvents="none"
           style={[

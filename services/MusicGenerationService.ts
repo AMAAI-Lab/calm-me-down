@@ -6,6 +6,7 @@ import {
   LYRICS_PROVIDERS,
   LyricsProviderType,
   LyricsResult,
+  MOCK_LYRICS,
   SUNO_ORG_PAYLOAD,
 } from "@/constants/appConstants";
 
@@ -33,6 +34,8 @@ export type GeneratedSong = {
   duration?: number;
   provider: string;
   songProviderPayload?: object;
+  lyrics?: string;
+  mood?: string;
 };
 
 type FinalReadyListener = (taskId: string, url: string) => void;
@@ -294,13 +297,21 @@ export async function generateSong(
   index?: number,
   genres?: string,
   artists?: string,
+  tempoRange?: number[],
 ): Promise<GeneratedSong | null> {
   console.log(` SERVICE: Starting Generation using [${CURRENT_SONG_PROVIDER}]`);
   console.log(` Lyrics snippet: "${lyrics.substring(0, 30)}..."`);
 
   switch (CURRENT_SONG_PROVIDER) {
     case "SUNO_ORG":
-      return await generateWithSunoOrg(lyrics, style, mood, genres, artists);
+      return await generateWithSunoOrg(
+        lyrics,
+        style,
+        mood,
+        genres,
+        artists,
+        tempoRange,
+      );
     case "SUNO":
       return await generateWithSuno(lyrics, style, mood);
     case "REPLICATE":
@@ -319,6 +330,7 @@ function buildSunoOrgPayload(
   genres: string,
   artists: string,
   musicStyle: string,
+  tempoRange?: number[],
 ) {
   const artistsArr = artists
     .split(",")
@@ -330,6 +342,9 @@ function buildSunoOrgPayload(
     genres?.length ? `Style: ${genres}.` : "",
     artists?.length
       ? `Artists: ${artistsArr.map((a) => `${a}-style`).join(", ")}.`
+      : "",
+    Array.isArray(tempoRange) && tempoRange?.length
+      ? `Tempo: ${tempoRange[0]}-${tempoRange[1]} BPM.`
       : "",
   ]
     .filter(Boolean)
@@ -353,6 +368,7 @@ async function generateWithSunoOrg(
   mood: string,
   genres?: string,
   artists?: string,
+  tempoRange?: number[],
 ): Promise<GeneratedSong | null> {
   if (!SUNO_ORG_API_KEY) {
     Alert.alert("Config Error", "Missing EXPO_PUBLIC_SUNO_ORG_API_KEY");
@@ -370,7 +386,13 @@ async function generateWithSunoOrg(
     };
 
     if (genres && artists) {
-      payload = buildSunoOrgPayload(lyrics, genres, artists, musicStyle);
+      payload = buildSunoOrgPayload(
+        lyrics,
+        genres,
+        artists,
+        musicStyle,
+        tempoRange,
+      );
     }
 
     const response = await fetch("https://api.sunoapi.org/api/v1/generate", {
@@ -803,44 +825,57 @@ async function generateWithMock(
   return generatedSong;
 }
 
-export function fetchSavedPlaylistTrack(index: number): GeneratedSong | null {
+export async function fetchSavedPlaylistTrack(
+  index: number,
+): Promise<GeneratedSong | null> {
+  await new Promise((r) => setTimeout(r, 12 * 1000));
+
+  const lyrics = MOCK_LYRICS;
   const tracks: GeneratedSong[] = [
     {
       id: "1",
       audioUrl:
-        "https://prod-1.storage.jamendo.com/?trackid=547233&format=mp31&from=Fu0sazsnbue6Z8J%2BkB0lHA%3D%3D%7CyqL1nb43yACduWvqZNYx0w%3D%3D",
-      title: "Song 1",
+        "https://www.image2url.com/r2/default/audio/1776774880658-0fced3b3-4ea6-4258-8504-734b74992e22.mp3",
+      title: "Saved song",
       duration: 30,
       provider: "MOCK",
+      lyrics,
+      mood: "calm",
     },
     {
       id: "2",
       audioUrl:
         "https://prod-1.storage.jamendo.com/?trackid=1210690&format=mp31&from=TRc2DtGKjCUn%2FyqvyMos5g%3D%3D%7CWTQt5%2FACfJ3G%2F35d1fYGFA%3D%3D",
-      title: "Song 2",
+      title: "Saved song",
       duration: 30,
       provider: "MOCK",
+      lyrics,
+      mood: "comforting",
     },
     {
       id: "3",
       audioUrl:
         "https://prod-1.storage.jamendo.com/?trackid=1160194&format=mp31&from=geCPusZxApKCczO010RaXQ%3D%3D%7CN07GqB%2BdGtlBE94yQWMXWQ%3D%3D",
-      title: "Song 3",
+      title: "Saved song",
       duration: 30,
       provider: "MOCK",
+      lyrics,
+      mood: "hopeful",
     },
     {
       id: "4",
       audioUrl:
         "https://prod-1.storage.jamendo.com/?trackid=951448&format=mp31&from=0jlXu5dhq1qDyJVR34SXkQ%3D%3D%7Ck3t4Goh0Q2o%2FuHluw1OsAA%3D%3D",
-      title: "Song 4",
+      title: "Saved song",
       duration: 30,
       provider: "MOCK",
+      lyrics,
+      mood: "joyful",
     },
   ];
 
-  if (index >= tracks.length) {
-    console.warn("Index is greater than no. of saved playlist tracks: ", index);
+  if (index < 0 || index > tracks.length) {
+    console.warn("Invalid index to fetch saved playlist track: ", index);
     return null;
   }
 
@@ -871,6 +906,7 @@ export async function downloadAndSaveAudio(
 
   const downloadRes = await downloadAsync(remoteUrl, fileUri);
   console.log(` Saved to: ${downloadRes.uri}`);
+  // file:///data/user/0/com.geeta.emotionapp/files/suno_1.mp3
 
   return {
     audioUrl: downloadRes.uri,
@@ -879,226 +915,3 @@ export async function downloadAndSaveAudio(
     provider: providerName,
   };
 }
-
-// async function downloadAndSaveAudio(
-//   remoteUrl: string,
-//   fileName: string,
-// ): Promise<string> {
-//   if (!remoteUrl) throw new Error("No audio URL provided.");
-
-//   const fileUri = FileSystem.documentDirectory + fileName;
-
-//   const downloadResumable = FileSystem.createDownloadResumable(
-//     remoteUrl,
-//     fileUri
-//   );
-
-//   const result = await downloadResumable.downloadAsync();
-
-//   return result?.uri || fileUri;
-// }
-
-//******************************************************************* */
-//****Commenting below, as making it modular now... use for fallback
-//******************************************************************* */
-
-// //Real song generation service using Replicate MusicGen model
-// export async function generateSong(lyrics: string, style: string, mood:string): Promise<GeneratedSong | null> {
-//     console.log("SERVICE: GEN SONG: Starting Mureka with lyrics:", lyrics.substring(0, 30) + '...');
-//     if (!REPLICATE_API_KEY) {
-//     //if (!HF_API_KEY) {
-//         console.warn('SERVICE: GEN SONG: Replicate Music Generation API key is not set.  Generating mock song.');
-//         Alert.alert('Music Generation API key is not set. Generating mock song.');
-//         return {
-//             audioUrl: 'hhttps://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-//             title: 'Mock Song',
-//             duration: 180,
-//         };
-//     }
-
-//     try {
-//         //console.log("SERVICE: GEN SONG: Sending request to Replicate...");
-//         console.log("SERVICE: GEN SONG: Sending request to SUNO...");
-//         const payload = {
-//             version: REPLICATE_MODEL_VERSION,
-//             input: {
-//                 prompt: `${style} song about ${mood}. Lyrics: ${lyrics}`,
-//                 tags: [style, mood],
-//                 //mv: 'mureka-7.5',
-//                 model_version: 'large', //meta-musicgen
-//                 duration: 20
-
-//             }
-//         };
-
-//         const payload_suno = {
-//             custom_mode: true,
-//             mv: 'sonic-v4.5',
-//             prompt: `${style} song about ${mood}. Lyrics: ${lyrics}`,
-//             tags: [style, mood],
-//         }
-
-//         //console.log("REPLICATE DEBUG")
-//         console.log("SUNO")
-
-//         const req = {
-//             method: 'POST',
-//             headers: {
-//                 'Content-Type': 'application/json',
-//                 'Authorization': `Bearer ${SUNO_API_KEY}`,
-//                 'Prefer': 'wait',
-//             },
-//             body: JSON.stringify(payload_suno),
-//         }
-//         console.log (" about to print req");
-//         //console.log("REPLICATE request : ", req);
-//         console.log("SUNO request : ", req);
-//         const response = await fetch(SUNO_URL, req);
-
-//         if (response.status === 503) {
-//             const errorData = await response.json();
-//             const waitTime = errorData.estimated_time || 20;
-//             console.log("SERVICE: GEN SONG: Model is loading, waiting for", waitTime, "seconds.");
-//             Alert.alert(`Music generation model is loading, please wait for ${waitTime} seconds and try again.`);
-//             return null;
-//         }
-
-//         if (!response.ok) {
-//             console.error('Failed to generate new song:', response.statusText);
-//             const err = await response.text();
-//             console.error('SUNO failed:', err)
-//             throw new Error(`SUNO error: ${response.status}`);
-
-//         }
-
-//         // const data = await response.json();
-
-//         // return {
-//         //     audioUrl: data.audioUrl || data[0].audioUrl,
-//         //     title: data.title || 'Generated Song',
-//         //     duration: data.duration,
-//         // };
-//         // const blob = await response.blob();
-//         // const reader = new FileReader();
-//         // return new Promise ((resolve) => {
-//         //     reader.onloadend = async () => {
-//         //         const base64data = (reader.result as string).split(',')[1]; // Remove data URL prefix
-
-//         //         // Use FileSystem (Main) for the directory path
-//         //         const fileDir = documentDirectory || '';
-//         //         const fileUri = fileDir + 'generated_song.wav';
-
-//         //         await writeAsStringAsync(fileUri, base64data, { encoding: 'base64' });
-//         //         console.log("SERVICE: GEN SONG: Song generated and saved to:", fileUri);
-//         //         resolve({
-//         //             audioUrl: fileUri,
-//         //             title: `Generated ${mood} Song`,
-//         //             duration: 15,
-//         //         });
-//         //     };
-//         //     reader.readAsDataURL(blob);
-//         // });
-
-//         console.log("Response from SUNO: ", response)
-
-//         const startData = await response.json();
-//         const taskID = startData.id;
-//         console.log("SERVICE: GEN SONG: SUNO Task ID:", taskID);
-
-//         //in case of suno, task id needs to be added to the GET request
-
-//         let prediction = startData;
-
-//         const getUrl = prediction.urls.get; //  link to poll
-
-//         let status = prediction.status;
-
-//         while (status !== 'succeeded' && status !== 'failed' && status !== 'canceled') {
-//             console.log(`Status: ${status}... waiting 2s`);
-//             await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
-
-//             const pollResponse = await fetch(getUrl, {
-//                 headers: {
-//                     'Authorization': `Bearer ${REPLICATE_API_KEY}`,
-//                     'Content-Type': 'application/json',
-//                 }
-//             });
-
-//             prediction = await pollResponse.json();
-//             status = prediction.status;
-//         }
-
-//         if (status !== 'succeeded') {
-//             console.error("REPLICATE Song Generation Failed Logs:", prediction.logs);
-//             throw new Error(`AI Generation failed: ${status}`);
-//         }
-
-//         //After generation, get audio from the link and save
-//         const remoteAudioUrl = prediction.output;
-//         console.log("REPLICATE AI Generation Finished! Downloading audio from:", remoteAudioUrl);
-
-//         if (!remoteAudioUrl) {
-//             throw new Error("REPLICATE AI finished but returned no audio URL.");
-//         }
-
-//         const fileDir = documentDirectory || '';
-//         const fileUri = fileDir + `replicate_${prediction.id}.wav`;
-
-//         const downloadRes = await downloadAsync(remoteAudioUrl, fileUri);
-
-//         console.log(" Song saved to:", downloadRes.uri);
-
-//         return {
-//             audioUrl: downloadRes.uri,
-//             title: `Generated ${mood} Track`,
-//             duration: 20,
-//         };
-
-//     } catch (error:any) {
-//         console.error('REPLICATE ERROR : Error generating song:', error);
-//         alert("AI Error: " + error.message);
-//         return null;
-//     }
-// }
-
-// //mock song generation service
-// // export async function generateSong(lyrics: string, style: string, mood: string): Promise<GeneratedSong | null> {
-// //     console.log(" MOCK SERVICE: Starting 'Generation'...");
-
-// //     // 1. Simulate API Processing Time (2 seconds)
-// //     // This lets you test your "Loading..." spinners in the UI
-// //     await new Promise(resolve => setTimeout(resolve, 2000));
-
-// //     try {
-// //         console.log("Downloading test audio...");
-
-// //         // 2. Download the test song to a local temp file
-// //         // We use downloadAsync because it's more robust for large files
-// //         const fileDir = documentDirectory || '';
-// //         const fileUri = fileDir + 'generated_song.mp3';
-
-// //         const downloadRes = await downloadAsync(
-// //             TEST_SONG_URL,
-// //             fileUri
-// //         );
-
-// //         if (downloadRes.status !== 200) {
-// //             throw new Error("Failed to download mock song");
-// //         }
-
-// //         console.log("Mock Song saved to:", downloadRes.uri);
-
-// //         // 3. Return the LOCAL URI (just like the real service will)
-// //         return {
-// //             audioUrl: downloadRes.uri,
-// //             title: `Generated ${mood} Track (Mock)`,
-// //             duration: 30,
-// //         };
-
-// //     } catch (error: any) {
-// //         console.error(' Error inside mock generateSong:', error);
-// //         Alert.alert("Mock Failed", error.message);
-// //         return null;
-// //     }
-// // }
-//**/

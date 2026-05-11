@@ -28,6 +28,7 @@ import {
   HealthProvider,
   HRV_APP_VERSION,
   LISTEN_BEFORE_GENERATE_MS,
+  SHOW_LYRICS,
   SUNO_ORG_PAYLOAD,
   UserInput,
   UserProfile,
@@ -52,7 +53,12 @@ import {
   generateSong,
   onFinalReady,
 } from "../services/MusicGenerationService";
-import { NewsData, WeatherData } from "../services/WeatherNewsService";
+import {
+  fetchUniqueNewsData,
+  fetchWeatherData,
+  NewsData,
+  WeatherData,
+} from "../services/WeatherNewsService";
 import {
   clearSessionId,
   clearTrackIds,
@@ -64,6 +70,9 @@ import {
 import LyricAnimator from "@/components/ui/lyric-animator";
 import { formatTime } from "@/util/commonUtils";
 import Biomarkers from "@/components/ui/biomarkers";
+import * as Location from "expo-location";
+
+const DEFAULT_DURATION = 150;
 
 export default function HomeScreen() {
   const authContext = useAuth();
@@ -75,9 +84,7 @@ export default function HomeScreen() {
     desiredMood: "",
     activity: "",
   });
-
   const [healthData, setHealthData] = useState<HealthData | null>(null);
-
   const [healthProvider, setHealthProvider] =
     useState<HealthProvider>("Apple Health");
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
@@ -86,10 +93,10 @@ export default function HomeScreen() {
   const [generatingLyrics, setGeneratingLyrics] = useState(false);
   const [generatingSong, setGeneratingSong] = useState(false);
   const [lyricPrompt, setLyricPrompt] = useState("");
-  const [generatedLyrics, setGeneratedLyrics] = useState("");
 
   const [emotionPath, setEmotionPath] = useState<string[]>([]);
   const [songQueue, setSongQueue] = useState<GeneratedSong[]>([]);
+  const [lyricsQueue, setLyricsQueue] = useState<string[]>([]);
   const [currentSongIndex, setCurrentSongIndex] = useState<number>(0);
   const [generationLockedForIndex, setGenerationLockedForIndex] = useState<
     number | null
@@ -116,23 +123,35 @@ export default function HomeScreen() {
       timestamp: string;
     }[]
   >([]);
-
-  const currentSong = songQueue[currentSongIndex] ?? null;
-  const player = useAudioPlayer(currentSong?.audioUrl || "");
-  const playerStatus = useAudioPlayerStatus(player);
-
-  const listenIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const generateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [sliderValue, setSliderValue] = useState(0);
   const [isSliding, setIsSliding] = useState(false);
 
-  const handleInputChange = (key: keyof UserInput, value: string) => {
-    setInput((prev) => ({ ...prev, [key]: value }));
-  };
+  const listenIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const generateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const isFormComplete = useMemo(() => {
     const requiredFields = [input.currentMood, input.desiredMood];
     return requiredFields.every((val) => val.trim() !== "");
   }, [input]);
+
+  const currentSong = songQueue[currentSongIndex] ?? null;
+  const currentSongLyrics = lyricsQueue[currentSongIndex] ?? null;
+  const player = useAudioPlayer(currentSong?.audioUrl || "");
+  const playerStatus = useAudioPlayerStatus(player);
+  const duration = player?.duration ?? 0;
+  const currentTime = player?.currentTime ?? 0;
+
+  const handleSlidingComplete = async (value: number) => {
+    try {
+      await player.seekTo(value);
+    } catch (err: any) {
+      console.warn("Seek failed: ", err?.message);
+    }
+  };
+
+  const handleInputChange = (key: keyof UserInput, value: string) => {
+    setInput((prev) => ({ ...prev, [key]: value }));
+  };
 
   const fetchLatestHealthData = useCallback(async () => {
     switch (healthProvider) {
@@ -152,6 +171,7 @@ export default function HomeScreen() {
     setDownloadedAudios({});
     setVaPath([]);
     setBioLog([]);
+    setLyricsQueue([]);
     await clearSessionId();
     await clearTrackIds();
   };
@@ -182,6 +202,10 @@ export default function HomeScreen() {
       deviation: 0,
     };
     let hrvMetrics = {};
+    const { weather, news } = (await fetchWeatherAndNews()) || {
+      weather: null,
+      news: null,
+    };
 
     if (HRV_APP_VERSION) {
       const vaTrajectory = buildVAPath(input.currentMood, input.desiredMood);
@@ -231,8 +255,8 @@ export default function HomeScreen() {
         valence: adjustedEmotion.valence,
         arousal: adjustedEmotion.arousal,
         healthData,
-        weatherData,
-        newsData,
+        weatherData: weather,
+        newsData: news,
         strategy,
       });
 
@@ -260,9 +284,9 @@ export default function HomeScreen() {
         - Current or upcoming activity: ${input.activity || "None specified"}
 
         ENVIRONMENT
-        - Location: ${weatherData?.city || "Unknown"}
-        - Weather: ${weatherData?.temperature ? `${weatherData.temperature}°C, ${weatherData.description}` : "Unknown"}
-        - News mood cue (optional): ${newsData?.headline || "N/A"}
+        - Location: ${weather?.city || "Unknown"}
+        - Weather: ${weather?.temperature ? `${weather.temperature}°C, ${weather.description}` : "Unknown"}
+        - News mood cue (optional): ${news?.headline || "N/A"}
 
         TASK:
         Write cohesive song lyrics.
@@ -288,7 +312,6 @@ export default function HomeScreen() {
 
     setLyricPrompt(prompt);
     setGeneratingLyrics(true);
-    setGeneratedLyrics("");
 
     // DEBUG MODE: Skip API calls
     if (DEBUG_MODE) {
@@ -298,7 +321,6 @@ export default function HomeScreen() {
       setTimeout(async () => {
         // 1. Mock Lyrics
         const mockLyrics = `(Mock Lyrics for ${user.name})\n\nIn the city of ${weatherData?.city || "Dreams"},\nHeart beating at ${healthData.heartRate || "steady"} pace,\nWalking through the ${weatherData?.description || "mist"},\nFinding my own space.\n\nFrom ${input.currentMood} shadows,\nTo ${input.desiredMood} light,\nThis song guides me,\nThrough the day and night.`;
-        setGeneratedLyrics(mockLyrics);
         setGeneratingLyrics(false);
 
         // 2. Mock Song (Immediately after)
@@ -327,7 +349,7 @@ export default function HomeScreen() {
       const { lyrics } = (await generatelyrics(prompt)) || {};
       if (lyrics) {
         currentLyrics = lyrics;
-        setGeneratedLyrics(lyrics);
+        setLyricsQueue([lyrics]);
       } else {
         console.warn("Lyrics Generation Failed!");
       }
@@ -431,6 +453,278 @@ export default function HomeScreen() {
     }
   };
 
+  const generateNextSong = async () => {
+    const nextSongIdx = currentSongIndex + 1;
+
+    if (songQueue.length > nextSongIdx) {
+      return;
+    }
+    if (HRV_APP_VERSION) {
+      if (
+        nextSongIdx >= vaPath.length // songs generated were more than trajectory length
+      ) {
+        return;
+      }
+    } else {
+      if (nextSongIdx >= emotionPath.length) {
+        return;
+      }
+    }
+
+    // const latestHealthData = await fetchAppleHealthData(10);
+    const latestHealthData = await fetchLatestHealthData();
+    const currentMood = emotionPath?.[nextSongIdx] || input.currentMood;
+
+    let prompt = "";
+    let adjustedEmotion = {
+      valence: 0,
+      arousal: 0,
+      emotion: "",
+      deviation: 0,
+    };
+    let hrvMetrics = {};
+    const { weather, news } = (await fetchWeatherAndNews()) || {
+      weather: null,
+      news: null,
+    };
+
+    if (HRV_APP_VERSION) {
+      adjustedEmotion = getBiometricAdjustedEmotion(
+        vaPath,
+        nextSongIdx,
+        latestHealthData.arousal,
+      );
+
+      const plannedVA = vaPath[Math.min(nextSongIdx, vaPath.length - 1)];
+      const strategy = getAdaptationStrategy(
+        adjustedEmotion.deviation,
+        plannedVA?.arousal ?? 0.5,
+        latestHealthData.arousal,
+      );
+
+      console.log(
+        `Song ${nextSongIdx} → Planned mood: ${emotionPath?.[nextSongIdx] || "N/A"}, ` +
+          `Adjusted: ${adjustedEmotion.emotion} (V:${adjustedEmotion.valence}, A:${adjustedEmotion.arousal}), ` +
+          `Bio arousal: ${latestHealthData.arousal}, Deviation: ${adjustedEmotion.deviation}, ` +
+          `Strategy: ${strategy}`,
+      );
+      console.log(
+        `  HR: ${latestHealthData.heartRate}, Steps: ${latestHealthData.steps}, HRV: ${latestHealthData.hrv}`,
+      );
+
+      // Log biometric state
+      setBioLog((prev) => [
+        ...prev,
+        {
+          songIndex: nextSongIdx,
+          planned: plannedVA,
+          adjusted: adjustedEmotion,
+          bioArousal: latestHealthData.arousal,
+          deviation: adjustedEmotion.deviation,
+          strategy,
+          hr: latestHealthData.heartRate,
+          steps: latestHealthData.steps,
+          hrv: latestHealthData.hrv,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+
+      // Build prompt with biometric-adjusted mood
+      prompt = buildLyricPrompt({
+        input: { ...user, ...input },
+        mood: adjustedEmotion.emotion,
+        valence: adjustedEmotion.valence,
+        arousal: adjustedEmotion.arousal,
+        healthData: latestHealthData,
+        weatherData: weather,
+        newsData: news,
+        strategy,
+      });
+
+      hrvMetrics = {
+        plannedVA,
+        adjustedEmotion,
+        strategy,
+      };
+    } else {
+      console.log("Mood input for next song: ", currentMood);
+      console.log("HR for next song: ", latestHealthData.heartRate);
+      console.log("Steps for next song: ", latestHealthData.steps);
+
+      prompt = `
+        You are a creative songwriter. Generate original song lyrics personalized to the following inputs:
+
+        USER
+        - Name: ${user.name}
+        - Age: ${user.age}
+
+        MUSIC STYLE
+        - Genre preference: ${user.favoriteGenre}
+        - Stylistic influence (do NOT imitate or quote): ${user.favoriteBand}
+        - mood: ${currentMood}
+
+        PHYSICAL CONTEXT
+        - Heart rate in last 5 min: ${latestHealthData.heartRate} bpm
+        - Movement in last 5 min: ${latestHealthData.steps} steps
+        - Current or upcoming activity: ${input.activity || "None specified"}
+
+        ENVIRONMENT
+        - Location: ${weather?.city || "Unknown"}
+        - Weather: ${weather?.temperature ? `${weather.temperature}°C, ${weather.description}` : "Unknown"}
+        - News mood cue (optional): ${news?.headline || "N/A"}
+
+        TASK:
+        Write cohesive song lyrics.
+        1. Structure: Verse 1, Chorus, Verse 2, Chorus (exact repeat), and Outro.
+        2. Tone: motivational, uplifting, and emotionally grounded.
+        3. Length: Target ~180-220 words total.
+        4. Integration: Integrate physical state, environment, and (if relevant) the news mood subtly and metaphorically
+        5. Originality: Avoid clichés and generic motivational phrases.
+        6. Style: Use the genre and stylistic influence only for rhythm, imagery, and tone guidance—do not imitate or quote them.
+
+        OUTPUT FORMAT (STRICT):
+        Return ONLY valid JSON. No preamble or markdown. Use the following structure:
+        {
+          "lyrics": {
+            "verse1": "...",
+            "chorus": "...",
+            "verse2": "...",
+            "outro": "..."
+          }
+        }
+      `;
+    }
+
+    if (DEBUG_MODE) {
+      console.log("DEBUG MODE: Generating mock lyrics and next song...");
+
+      setTimeout(async () => {
+        const nextSongIdx = ((currentSongIndex + 1) % 15) + 1;
+        const mockSongData: GeneratedSong = {
+          audioUrl: `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-${nextSongIdx}.mp3`, // Public domain MP3
+          title: `Song for ${user.name || "N/A"}`,
+          duration: 30,
+          provider: "MOCK",
+        };
+
+        setSongQueue((prev) => [...prev, mockSongData]);
+      }, 500);
+
+      return;
+    }
+
+    // Generate song lyrics
+    let currentLyrics = "";
+    try {
+      const { lyrics } = (await generatelyrics(prompt)) || {};
+      if (lyrics) {
+        currentLyrics = lyrics;
+        setLyricsQueue((prev) => [...prev, lyrics]);
+      } else {
+        console.warn("Lyrics Generation failed for next song!");
+      }
+    } catch (error: any) {
+      console.error(
+        "An error occurred while generating lyrics for next song:",
+        error.message,
+      );
+    }
+
+    // Generate Song Audio
+    console.log(
+      `Generating next song with lyrics: "${(currentLyrics || "").substring(0, 150)}..."`,
+    );
+    let generatedStreamUrl = null;
+    try {
+      const generatedSong = await generateSong(
+        currentLyrics || "Uplifting song",
+        user?.favoriteGenre || "N/A",
+        adjustedEmotion.emotion || input?.desiredMood || "N/A",
+        nextSongIdx,
+        user?.favoriteGenre,
+        user?.favoriteBand,
+      );
+      if (generatedSong) {
+        setSongQueue((prev) => [...prev, generatedSong]);
+        generatedStreamUrl = generatedSong?.audioUrl;
+      } else {
+        console.warn("Could not generate next song audio.");
+      }
+    } catch (error: any) {
+      console.error(
+        "An error occurred while generating next song audio.",
+        error.message,
+      );
+      setGenerationLockedForIndex(null);
+    }
+
+    try {
+      const sessionId = await getSessionId();
+      const trackRes = await addTrackToSession(
+        user?.email!,
+        sessionId,
+        nextSongIdx,
+        {
+          mood: currentMood || "N/A",
+          streamUrl:
+            generatedStreamUrl || songQueue[nextSongIdx]?.audioUrl || "",
+          lyrics: currentLyrics,
+          lyricsPrompt: prompt,
+          heartRate: latestHealthData?.heartRate || "N/A",
+          steps: latestHealthData?.steps || "N/A",
+          hrvMetrics,
+        },
+      );
+
+      await saveTrackId(trackRes?.id!, trackRes?.songIdx || 0);
+    } catch (err) {
+      console.error("Error while updating DB: ", err);
+    }
+  };
+
+  const checkEnvVars = () => {
+    const ENV = {
+      CLAUDE_API_KEY: process.env.EXPO_PUBLIC_CLAUDE_API_KEY,
+      OPENWEATHER_API_KEY: process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY,
+    };
+    const { CLAUDE_API_KEY, OPENWEATHER_API_KEY } = ENV;
+    Alert.alert(
+      "ENV Variables:",
+      `-> OPENWEATHER_API_KEY : ${OPENWEATHER_API_KEY} -> CLAUDE_API_KEY: ${CLAUDE_API_KEY}`,
+    );
+  };
+
+  const fetchWeatherAndNews = async (
+    firstCall: boolean = false,
+  ): Promise<{ weather: WeatherData | null; news: NewsData | null } | null> => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") return null;
+
+    let loc = await Location.getCurrentPositionAsync({});
+    if (firstCall) console.log("location set");
+
+    const weather = await fetchWeatherData(
+      loc.coords.latitude,
+      loc.coords.longitude,
+    );
+    setWeatherData(weather);
+
+    let news = null;
+    news = await fetchUniqueNewsData(weather?.city);
+
+    // If news data isn't available for a particular country-code, then try 'US' as fallback
+    if (!news) {
+      news = await fetchUniqueNewsData("us");
+    }
+    setNewsData(news);
+
+    return { weather, news };
+  };
+
+  useEffect(() => {
+    fetchWeatherAndNews(true);
+  }, []);
+
   useEffect(() => {
     const clearListenInterval = () => {
       if (listenIntervalRef.current) {
@@ -498,230 +792,6 @@ export default function HomeScreen() {
       handleNextSong();
     }
   }, [playerStatus.playing]);
-
-  const generateNextSong = async () => {
-    const nextSongIdx = currentSongIndex + 1;
-
-    if (songQueue.length > nextSongIdx) {
-      return;
-    }
-    if (HRV_APP_VERSION) {
-      if (
-        nextSongIdx >= vaPath.length // songs generated were more than trajectory length
-      ) {
-        return;
-      }
-    } else {
-      if (nextSongIdx >= emotionPath.length) {
-        return;
-      }
-    }
-
-    // const latestHealthData = await fetchAppleHealthData(10);
-    const latestHealthData = await fetchLatestHealthData();
-    const currentMood = emotionPath?.[nextSongIdx] || input.currentMood;
-
-    let prompt = "";
-    let adjustedEmotion = {
-      valence: 0,
-      arousal: 0,
-      emotion: "",
-      deviation: 0,
-    };
-    let hrvMetrics = {};
-
-    if (HRV_APP_VERSION) {
-      adjustedEmotion = getBiometricAdjustedEmotion(
-        vaPath,
-        nextSongIdx,
-        latestHealthData.arousal,
-      );
-
-      const plannedVA = vaPath[Math.min(nextSongIdx, vaPath.length - 1)];
-      const strategy = getAdaptationStrategy(
-        adjustedEmotion.deviation,
-        plannedVA?.arousal ?? 0.5,
-        latestHealthData.arousal,
-      );
-
-      console.log(
-        `Song ${nextSongIdx} → Planned mood: ${emotionPath?.[nextSongIdx] || "N/A"}, ` +
-          `Adjusted: ${adjustedEmotion.emotion} (V:${adjustedEmotion.valence}, A:${adjustedEmotion.arousal}), ` +
-          `Bio arousal: ${latestHealthData.arousal}, Deviation: ${adjustedEmotion.deviation}, ` +
-          `Strategy: ${strategy}`,
-      );
-      console.log(
-        `  HR: ${latestHealthData.heartRate}, Steps: ${latestHealthData.steps}, HRV: ${latestHealthData.hrv}`,
-      );
-
-      // Log biometric state
-      setBioLog((prev) => [
-        ...prev,
-        {
-          songIndex: nextSongIdx,
-          planned: plannedVA,
-          adjusted: adjustedEmotion,
-          bioArousal: latestHealthData.arousal,
-          deviation: adjustedEmotion.deviation,
-          strategy,
-          hr: latestHealthData.heartRate,
-          steps: latestHealthData.steps,
-          hrv: latestHealthData.hrv,
-          timestamp: new Date().toISOString(),
-        },
-      ]);
-
-      // Build prompt with biometric-adjusted mood
-      prompt = buildLyricPrompt({
-        input: { ...user, ...input },
-        mood: adjustedEmotion.emotion,
-        valence: adjustedEmotion.valence,
-        arousal: adjustedEmotion.arousal,
-        healthData: latestHealthData,
-        weatherData,
-        newsData,
-        strategy,
-      });
-
-      hrvMetrics = {
-        plannedVA,
-        adjustedEmotion,
-        strategy,
-      };
-    } else {
-      console.log("Mood input for next song: ", currentMood);
-      console.log("HR for next song: ", latestHealthData.heartRate);
-      console.log("Steps for next song: ", latestHealthData.steps);
-
-      prompt = `
-        You are a creative songwriter. Generate original song lyrics personalized to the following inputs:
-
-        USER
-        - Name: ${user.name}
-        - Age: ${user.age}
-
-        MUSIC STYLE
-        - Genre preference: ${user.favoriteGenre}
-        - Stylistic influence (do NOT imitate or quote): ${user.favoriteBand}
-        - mood: ${currentMood}
-
-        PHYSICAL CONTEXT
-        - Heart rate in last 5 min: ${latestHealthData.heartRate} bpm
-        - Movement in last 5 min: ${latestHealthData.steps} steps
-        - Current or upcoming activity: ${input.activity || "None specified"}
-
-        ENVIRONMENT
-        - Location: ${weatherData?.city || "Unknown"}
-        - Weather: ${weatherData?.temperature ? `${weatherData.temperature}°C, ${weatherData.description}` : "Unknown"}
-        - News mood cue (optional): ${newsData?.headline || "N/A"}
-
-        TASK:
-        Write cohesive song lyrics.
-        1. Structure: Verse 1, Chorus, Verse 2, Chorus (exact repeat), and Outro.
-        2. Tone: motivational, uplifting, and emotionally grounded.
-        3. Length: Target ~180-220 words total.
-        4. Integration: Integrate physical state, environment, and (if relevant) the news mood subtly and metaphorically
-        5. Originality: Avoid clichés and generic motivational phrases.
-        6. Style: Use the genre and stylistic influence only for rhythm, imagery, and tone guidance—do not imitate or quote them.
-
-        OUTPUT FORMAT (STRICT):
-        Return ONLY valid JSON. No preamble or markdown. Use the following structure:
-        {
-          "lyrics": {
-            "verse1": "...",
-            "chorus": "...",
-            "verse2": "...",
-            "outro": "..."
-          }
-        }
-      `;
-    }
-
-    if (DEBUG_MODE) {
-      console.log("DEBUG MODE: Generating mock lyrics and next song...");
-
-      setTimeout(async () => {
-        const nextSongIdx = ((currentSongIndex + 1) % 15) + 1;
-        const mockSongData: GeneratedSong = {
-          audioUrl: `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-${nextSongIdx}.mp3`, // Public domain MP3
-          title: `Song for ${user.name || "N/A"}`,
-          duration: 30,
-          provider: "MOCK",
-        };
-
-        setSongQueue((prev) => [...prev, mockSongData]);
-      }, 500);
-
-      return;
-    }
-
-    // Generate song lyrics
-    let currentLyrics = "";
-    try {
-      const { lyrics } = (await generatelyrics(prompt)) || {};
-      if (lyrics) {
-        currentLyrics = lyrics;
-      } else {
-        console.warn("Lyrics Generation failed for next song!");
-      }
-    } catch (error: any) {
-      console.error(
-        "An error occurred while generating lyrics for next song:",
-        error.message,
-      );
-    }
-
-    // Generate Song Audio
-    console.log(
-      `Generating next song with lyrics: "${(currentLyrics || "").substring(0, 150)}..."`,
-    );
-    let generatedStreamUrl = null;
-    try {
-      const generatedSong = await generateSong(
-        currentLyrics || "Uplifting song",
-        user?.favoriteGenre || "N/A",
-        adjustedEmotion.emotion || input?.desiredMood || "N/A",
-        nextSongIdx,
-        user?.favoriteGenre,
-        user?.favoriteBand,
-      );
-      if (generatedSong) {
-        setSongQueue((prev) => [...prev, generatedSong]);
-        generatedStreamUrl = generatedSong?.audioUrl;
-      } else {
-        console.warn("Could not generate next song audio.");
-      }
-    } catch (error: any) {
-      console.error(
-        "An error occurred while generating next song audio.",
-        error.message,
-      );
-      setGenerationLockedForIndex(null);
-    }
-
-    try {
-      const sessionId = await getSessionId();
-      const trackRes = await addTrackToSession(
-        user?.email!,
-        sessionId,
-        nextSongIdx,
-        {
-          mood: currentMood || "N/A",
-          streamUrl:
-            generatedStreamUrl || songQueue[nextSongIdx]?.audioUrl || "",
-          lyrics: currentLyrics,
-          lyricsPrompt: prompt,
-          heartRate: latestHealthData?.heartRate || "N/A",
-          steps: latestHealthData?.steps || "N/A",
-          hrvMetrics,
-        },
-      );
-
-      await saveTrackId(trackRes?.id!, trackRes?.songIdx || 0);
-    } catch (err) {
-      console.error("Error while updating DB: ", err);
-    }
-  };
 
   useEffect(() => {
     if (generateTimerRef.current) {
@@ -807,16 +877,6 @@ export default function HomeScreen() {
     });
   }, [songQueue, currentSongIndex]);
 
-  const duration = player?.duration ?? 0;
-  const currentTime = player?.currentTime ?? 0;
-  const handleSlidingComplete = async (value: number) => {
-    try {
-      await player.seekTo(value);
-    } catch (err: any) {
-      console.warn("Seek failed: ", err?.message);
-    }
-  };
-
   useEffect(() => {
     if (!playerStatus.isLoaded) return;
 
@@ -824,18 +884,6 @@ export default function HomeScreen() {
       setSliderValue(playerStatus.currentTime ?? 0);
     }
   }, [playerStatus.currentTime, isSliding]);
-
-  const checkEnvVars = () => {
-    const ENV = {
-      CLAUDE_API_KEY: process.env.EXPO_PUBLIC_CLAUDE_API_KEY,
-      OPENWEATHER_API_KEY: process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY,
-    };
-    const { CLAUDE_API_KEY, OPENWEATHER_API_KEY } = ENV;
-    Alert.alert(
-      "ENV Variables:",
-      `-> OPENWEATHER_API_KEY : ${OPENWEATHER_API_KEY} -> CLAUDE_API_KEY: ${CLAUDE_API_KEY}`,
-    );
-  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#171A1F" }}>
@@ -884,9 +932,7 @@ export default function HomeScreen() {
         <Biomarkers
           healthData={healthData}
           weatherData={weatherData}
-          setWeatherData={setWeatherData}
           newsData={newsData}
-          setNewsData={setNewsData}
         />
 
         {isFormComplete && healthData && (
@@ -904,17 +950,16 @@ export default function HomeScreen() {
         )}
 
         {/* Display  lyrics and Audio Player */}
-        {(generatedLyrics || currentSong) && (
+        {((SHOW_LYRICS && currentSongLyrics) || currentSong) && (
           <View style={styles.stepContainer}>
-            {generatedLyrics && generatedLyrics?.length && (
+            {SHOW_LYRICS && !!currentSongLyrics && (
               <View>
                 <Text style={styles.lyricsTitle}>Your Song</Text>
-                <LyricAnimator text={generatedLyrics} />
-                {/* <LyricAnimator
-                  text={currentLyrics}
+                <LyricAnimator
+                  text={currentSongLyrics}
                   currentTimeMs={currentTime * 1000}
                   songDurationMs={(duration || DEFAULT_DURATION) * 1000}
-                /> */}
+                />
               </View>
             )}
 
@@ -1084,7 +1129,7 @@ export default function HomeScreen() {
           </View>
         ) : null}
         {/*Debug Prompt Display*/}
-        {generatedLyrics && lyricPrompt ? (
+        {currentSongLyrics && lyricPrompt ? (
           <View style={{ marginTop: 20, opacity: 0.5 }}>
             <Text style={{ color: "#ece5e5", fontSize: 12 }}>
               Debug Prompt:
