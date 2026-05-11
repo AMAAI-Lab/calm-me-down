@@ -225,10 +225,10 @@ export default function FeedbackScreen() {
   };
 
   const populateForm = () => {
-    setArousal(5);
-    setValence(5);
-    setEngaging(5);
-    setPersonal(5);
+    setArousal(7);
+    setValence(7);
+    setEngaging(7);
+    setPersonal(7);
     setTargetMood(2);
   };
 
@@ -349,11 +349,13 @@ export default function FeedbackScreen() {
               value={valence}
               onChange={setValence}
               hints={[
-                "1 — Very sad",
-                "2 — Sad",
-                "3 — Neutral",
-                "4 — Happy",
-                "5 — Very happy",
+                "1 — Very Unpleasant",
+                "2 ",
+                "3 ",
+                "4 ",
+                "5 ",
+                "6 ",
+                "7 - Very Pleasant"
               ]}
               isParticipantsScreen={false}
             />
