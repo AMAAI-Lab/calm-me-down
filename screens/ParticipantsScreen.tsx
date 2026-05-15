@@ -25,6 +25,7 @@ import {
   HealthData,
 } from "@/services/HealthService";
 import {
+  AI_TRAJECTORY_LENGTH,
   CONTINUOUS_PLAYBACK_MS,
   DEFAULT_HEALTH_DATA,
   HealthProvider,
@@ -44,21 +45,25 @@ import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import Slider from "@react-native-community/slider";
 import CommonButton from "@/components/ui/common-button";
 import {
-  clearFeedbackSubmitted,
-  clearSessionId,
+  clearPgpIds,
   clearTrackIds,
+  clearTrajectoryId,
+  clearVocalGenderCounts,
   FeedbackSubmittedStatus,
   getFeedbackSubmitted,
-  getSessionFeedback,
+  getPlaylistFeedback,
   getSessionId,
   getTrackId,
+  getTrajectoryId,
   saveSessionId,
   saveTrackId,
+  saveTrajectoryId,
 } from "@/services/LocalUserService";
 import { useAuth } from "@/context/AuthContext";
 import {
-  addTrackToSession,
+  addTrackToSession as addTrackToTrajectory,
   createMusicSession,
+  createMusicTrajectory,
   updateTrackFields,
 } from "@/services/DbService";
 import { useNavigation } from "expo-router";
@@ -75,16 +80,19 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as Location from "expo-location";
 import { shareLogs, viewLogs } from "@/services/LoggerService";
 import LoadingPhrases from "@/components/ui/loading-phrases";
-import { buildEmotionPath } from "@/services/EmotionPathService";
+import {
+  buildEmotionPath,
+  buildUniqueEmotionPath,
+} from "@/services/EmotionPathService";
 import EmotionGrid from "@/components/ui/emotion-grid";
 
 type TargetEmotion = "calm" | "joyful";
 type ActivityCtx = "Sitting in Lab" | "Walking Outside";
 type PlaylistType = "Trajectory" | "SavedPlaylist";
-type SessionId = "A" | "B" | "C" | "D";
+type PlaylistId = "A" | "B" | "C" | "D";
 type Phase = "setup" | "running" | "complete";
 
-interface SessionDef {
+interface PlaylistDef {
   targetEmotion: TargetEmotion;
   playlistType: PlaylistType;
   context: ActivityCtx;
@@ -101,7 +109,7 @@ const C = {
   textDim: "#404060",
 } as const;
 
-const SESSION_DEFS: Record<SessionId, SessionDef> = {
+const PLAYLIST_DEFS: Record<PlaylistId, PlaylistDef> = {
   A: {
     targetEmotion: "calm",
     playlistType: "Trajectory",
@@ -124,7 +132,7 @@ const SESSION_DEFS: Record<SessionId, SessionDef> = {
   },
 };
 
-const SEQUENCES: Record<TargetEmotion, [SessionId[], SessionId[]]> = {
+const SEQUENCES: Record<TargetEmotion, [PlaylistId[], PlaylistId[]]> = {
   calm: [
     ["A", "B", "C", "D"],
     ["C", "D", "A", "B"],
@@ -137,19 +145,19 @@ const SEQUENCES: Record<TargetEmotion, [SessionId[], SessionId[]]> = {
 
 const DEFAULT_DURATION = 120;
 
-function pickSequence(target: TargetEmotion, activity: string): SessionId[] {
-  let sessionId = null;
-  Object.entries(SESSION_DEFS).forEach(([id, def]) => {
+function pickSequence(target: TargetEmotion, activity: string): PlaylistId[] {
+  let playlistId = null;
+  Object.entries(PLAYLIST_DEFS).forEach(([id, def]) => {
     if (def.targetEmotion === target && def.context === activity) {
-      sessionId = id;
+      playlistId = id;
     }
   });
 
   const [s1, s2] = SEQUENCES[target];
-  if (sessionId) {
-    return s1[0] === sessionId ? s1 : s2;
+  if (playlistId) {
+    return s1[0] === playlistId ? s1 : s2;
   }
-  return (Math.random() < 0.5 ? s1 : s2) as SessionId[];
+  return (Math.random() < 0.5 ? s1 : s2) as PlaylistId[];
 }
 
 export default function ParticipantsScreen() {
@@ -169,6 +177,7 @@ export default function ParticipantsScreen() {
   const [healthProvider, setHealthProvider] =
     useState<HealthProvider>("Apple Health");
 
+  const [songJustFinished, setSongJustFinished] = useState(false);
   const [nextSongLoading, setNextSongLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [songQueue, setSongQueue] = useState<GeneratedSong[]>([]);
@@ -181,8 +190,8 @@ export default function ParticipantsScreen() {
   const [downloadedAudios, setDownloadedAudios] = useState<
     Record<number, string>
   >({});
-  const [sequence, setSequence] = useState<SessionId[]>([]);
-  const [sessionIdx, setSessionIdx] = useState(0);
+  const [sequence, setSequence] = useState<PlaylistId[]>([]);
+  const [playlistIdx, setPlaylistIdx] = useState(0);
   const [songRatings, setSongRatings] = useState<Record<number, "up" | "down">>(
     {},
   );
@@ -217,7 +226,7 @@ export default function ParticipantsScreen() {
     } else if (Platform.OS === "ios" && !healthData) {
       return "Please authorize the Apple Health";
     } else if (!feedbackSubmitted?.[0]?.pre) {
-      return "Please give a review before starting the session.";
+      return "Please set the mood meter before starting the session.";
     }
 
     return "";
@@ -229,23 +238,33 @@ export default function ParticipantsScreen() {
     feedbackSubmitted,
   ]);
 
-  const nextSessionMsg = useMemo(() => {
-    if (!feedbackSubmitted?.[sessionIdx]?.post) {
-      return "Please give a review of the session.";
-    } else if (!feedbackSubmitted?.[sessionIdx + 1]?.pre) {
-      return "Please leave your review before starting the next session.";
+  const nextPlaylistMsg = useMemo(() => {
+    if (!feedbackSubmitted?.[playlistIdx]?.post) {
+      return "Please review the playlist in google form and also update the mood meter here.";
+    } else if (!feedbackSubmitted?.[playlistIdx + 1]?.pre) {
+      return "Please review the playlist in google form and also update the mood meter here before starting the next one.";
     } else if (!startEmotion) {
       return "Please select your starting emotion above";
     }
 
-    return "Tap below to begin the next session.";
-  }, [startEmotion, feedbackSubmitted, sessionIdx]);
+    return "Tap below to begin the next playlist.";
+  }, [startEmotion, feedbackSubmitted, playlistIdx]);
 
-  const currSessionFinished =
+  const activitySequence = useMemo(() => {
+    if (!sequence?.length) return [];
+
+    const context = PLAYLIST_DEFS[sequence[0]].context;
+    const otherContext =
+      context === "Sitting in Lab" ? "Walking Outside" : "Sitting in Lab";
+
+    return [context, context, otherContext, otherContext];
+  }, [sequence]);
+
+  const currPlaylistFinished =
     emotionTrajectory.length > 0 &&
     currentSongIndex + 1 >= emotionTrajectory.length;
-  const allSessionsCompleted =
-    currSessionFinished && sessionIdx === sequence.length - 1;
+  const allPlaylistsCompleted =
+    currPlaylistFinished && playlistIdx === sequence.length - 1;
   const isLocked = loading || nextSongLoading || phase !== "setup";
   const ratingDone = !!songRatings[currentSongIndex];
 
@@ -256,22 +275,24 @@ export default function ParticipantsScreen() {
   const playerStatus = useAudioPlayerStatus(player);
   const duration = player?.duration ?? 0;
   const currentTime = player?.currentTime ?? 0;
-  const nextSessionBtnDisabled =
+  const nextPlaylistBtnDisabled =
     loading ||
     !startEmotion ||
-    !feedbackSubmitted?.[sessionIdx]?.post ||
-    !feedbackSubmitted?.[sessionIdx + 1]?.pre;
-  const showReviewButton =
+    !feedbackSubmitted?.[playlistIdx]?.post ||
+    !feedbackSubmitted?.[playlistIdx + 1]?.pre;
+  const showMoodMeterButton =
     !loading &&
-    ((!songQueue.length && !feedbackSubmitted?.[sessionIdx]?.pre) ||
-      (currSessionFinished &&
+    ((!songQueue.length && !feedbackSubmitted?.[playlistIdx]?.pre) ||
+      (currPlaylistFinished &&
         ratingDone &&
-        (!feedbackSubmitted?.[sessionIdx]?.post ||
-          !feedbackSubmitted?.[sessionIdx + 1]?.pre)));
+        (!feedbackSubmitted?.[playlistIdx]?.post ||
+          (!feedbackSubmitted?.[playlistIdx + 1]?.pre &&
+            !allPlaylistsCompleted))));
   const isEmotionLocked =
     loading ||
     nextSongLoading ||
-    (songQueue.length > 0 && (!currSessionFinished || !ratingDone));
+    (songQueue.length > 0 && (!currPlaylistFinished || !ratingDone));
+  const nextActivity = activitySequence?.[playlistIdx + 1] || "";
 
   const activityIcon = (
     <FontAwesome5
@@ -296,8 +317,40 @@ export default function ParticipantsScreen() {
     setPlaylistType("");
     setLyricsQueue([]);
     setFinalUrlsReady({});
-    await clearSessionId();
+    await clearTrajectoryId();
     await clearTrackIds();
+    await clearPgpIds();
+    await clearVocalGenderCounts();
+  };
+
+  const fetchWeatherAndNews = async (
+    firstCall: boolean = false,
+  ): Promise<{ weather: WeatherData | null; news: NewsData | null } | null> => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") return null;
+
+    let loc = await Location.getCurrentPositionAsync({});
+    if (firstCall) console.log("location set");
+
+    let weather = weatherData;
+    if (!weather) {
+      weather = await fetchWeatherData(
+        loc.coords.latitude,
+        loc.coords.longitude,
+      );
+      setWeatherData(weather);
+    }
+
+    let news = null;
+    news = await fetchUniqueNewsData(weather?.city);
+
+    // If news data isn't available for a particular country-code, then try 'US' as fallback
+    if (!news) {
+      news = await fetchUniqueNewsData("us");
+    }
+    setNewsData(news);
+
+    return { weather, news };
   };
 
   const buildLyricsPrompt = async (mood: string, healthData: HealthData) => {
@@ -360,15 +413,25 @@ export default function ParticipantsScreen() {
   };
 
   const generateTrajectory = (givenTargetEmotion?: string) => {
-    const trajec = buildEmotionPath(
+    // return [startEmotion || "Bored", givenTargetEmotion || targetEmotion || "Calm"];
+
+    let trajec = buildEmotionPath(
       startEmotion,
       givenTargetEmotion || targetEmotion || "Calm",
-      2,
+      AI_TRAJECTORY_LENGTH - 2,
     );
+
+    if (trajec.length < AI_TRAJECTORY_LENGTH) {
+      trajec = buildUniqueEmotionPath(
+        startEmotion,
+        givenTargetEmotion || targetEmotion || "Calm",
+        AI_TRAJECTORY_LENGTH,
+      );
+    }
 
     if (trajec.length === 1) {
       return [
-        startEmotion || "",
+        startEmotion || "Bored",
         givenTargetEmotion || targetEmotion || "Calm",
       ];
     }
@@ -377,12 +440,8 @@ export default function ParticipantsScreen() {
 
   const generateLyricsAndSong = async (
     givenTargetEmotion?: string,
-    nextSessionIdx: number = 0,
+    nextPlaylistIdx: number = 0,
   ) => {
-    if (loading) {
-      return;
-    }
-    setLoading(true);
     await clearStates();
 
     setPlaylistType("Trajectory");
@@ -449,31 +508,29 @@ export default function ParticipantsScreen() {
         error.message,
       );
     }
-    setLoading(false);
 
     const currTrajectory = generateTrajectory(givenTargetEmotion);
     setEmotionTrajectory(currTrajectory);
     try {
-      const feedbackBefore = await getSessionFeedback();
-      const newSessionID = await createMusicSession(
+      const feedbackBefore = await getPlaylistFeedback();
+      const sessionId = await getSessionId();
+      const newTrajectoryID = await createMusicTrajectory(
         user?.email!,
+        sessionId,
         {
           emotionTrajectory: currTrajectory,
-          userDetails: { ...user },
           lyricPrompt: prompt,
           songPrompt: currentLyrics,
-          hrvUsed: false,
           playlistType: "trajectory",
-          sessionNumber: nextSessionIdx + 1,
+          trajectoryNumber: nextPlaylistIdx + 1,
           feedbackBefore,
         },
-        true,
       );
-      await saveSessionId(newSessionID);
+      await saveTrajectoryId(newTrajectoryID);
 
-      const trackRes = await addTrackToSession(
+      const trackRes = await addTrackToTrajectory(
         user?.email!,
-        newSessionID!,
+        sessionId!,
         currentSongIndex,
         {
           mood: startEmotion || currTrajectory[0] || "N/A",
@@ -486,6 +543,7 @@ export default function ParticipantsScreen() {
           suggestedAiMusicStyle: suggestedMusicStyle || "",
         },
         true,
+        newTrajectoryID,
       );
       await saveTrackId(trackRes?.id!, trackRes?.songIdx || 0);
     } catch (err) {
@@ -495,15 +553,16 @@ export default function ParticipantsScreen() {
 
   const generateSavedPlaylist = async (
     givenTargetEmotion?: string,
-    nextSessionIdx: number = 0,
+    nextPlaylistIdx: number = 0,
   ) => {
-    setLoading(true);
     await clearStates();
+    await fetchWeatherAndNews();
 
     setPlaylistType("SavedPlaylist");
-    const track = await fetchSavedPlaylistTrack(0);
+    const track = await fetchSavedPlaylistTrack(
+      (givenTargetEmotion || targetEmotion) === "calm" ? "calm" : "joyful",
+    );
     if (!track) {
-      setLoading(false);
       return;
     }
 
@@ -513,25 +572,23 @@ export default function ParticipantsScreen() {
     setEmotionTrajectory(currTrajectory);
 
     try {
-      const feedbackBefore = await getSessionFeedback();
-
-      const newSessionID = await createMusicSession(
+      const feedbackBefore = await getPlaylistFeedback();
+      const sessionId = await getSessionId();
+      const newTrajectoryID = await createMusicTrajectory(
         user?.email!,
+        sessionId,
         {
           emotionTrajectory: currTrajectory,
-          userDetails: { ...user },
-          hrvUsed: false,
           playlistType: "savedPlaylist",
-          sessionNumber: nextSessionIdx + 1,
+          trajectoryNumber: nextPlaylistIdx + 1,
           feedbackBefore,
         },
-        true,
       );
-      await saveSessionId(newSessionID);
+      await saveTrajectoryId(newTrajectoryID);
 
-      const trackRes = await addTrackToSession(
+      const trackRes = await addTrackToTrajectory(
         user?.email!,
-        newSessionID!,
+        sessionId!,
         currentSongIndex,
         {
           mood: startEmotion || currTrajectory[0] || "N/A",
@@ -540,62 +597,82 @@ export default function ParticipantsScreen() {
           steps: healthData?.steps || "N/A",
         },
         true,
+        newTrajectoryID,
       );
       await saveTrackId(trackRes?.id!, trackRes?.songIdx || 0);
     } catch (err) {
       console.error("Error updating DB: ", err);
     }
+  };
+
+  const handleStart = async () => {
+    if (loading) {
+      return;
+    }
+    setLoading(true);
+
+    try {
+      if (!startEmotion || !targetEmotion || !activityValue) return;
+      const seq = pickSequence(targetEmotion, activityValue);
+      setSequence(seq);
+
+      const newSessionID = await createMusicSession(
+        user?.email!,
+        {
+          userDetails: { ...user },
+          hrvUsed: false,
+        },
+        true,
+      );
+      await saveSessionId(newSessionID);
+
+      const firstPlaylist = PLAYLIST_DEFS[seq[0]];
+      if (firstPlaylist.playlistType === "Trajectory") {
+        await generateLyricsAndSong();
+      } else {
+        await generateSavedPlaylist();
+      }
+
+      setPhase("running");
+    } catch (err: any) {
+      console.error("Error while starting session: ", err?.message);
+    }
 
     setLoading(false);
   };
 
-  const handleStart = async () => {
-    if (!startEmotion || !targetEmotion || !activityValue) return;
-    const seq = pickSequence(targetEmotion, activityValue);
-    setSequence(seq);
-
-    const firstSession = SESSION_DEFS[seq[0]];
-    if (firstSession.playlistType === "Trajectory") {
-      await generateLyricsAndSong();
-    } else {
-      await generateSavedPlaylist();
-    }
-
-    setPhase("running");
-  };
-
-  const startNextSession = async () => {
+  const startNextPlaylist = async () => {
     if (loading) return;
     setLoading(true);
 
-    const nextSessionIdx = sessionIdx + 1;
-    setSessionIdx(nextSessionIdx);
-    if (nextSessionIdx >= sequence.length) {
-      setLoading(false);
-      return;
-    }
+    try {
+      const nextPlaylistIdx = playlistIdx + 1;
+      setPlaylistIdx(nextPlaylistIdx);
+      if (nextPlaylistIdx >= sequence.length) {
+        setLoading(false);
+        return;
+      }
 
-    const nextSequenceId = sequence[nextSessionIdx];
-    const newSessionDef = SESSION_DEFS[nextSequenceId];
+      const nextSequenceId = sequence[nextPlaylistIdx];
+      const newPlaylistDef = PLAYLIST_DEFS[nextSequenceId];
 
-    const {
-      playlistType,
-      context,
-      targetEmotion: newTargetEmotion,
-    } = newSessionDef;
-    setActivityValue(context);
-    setTargetEmotion(newTargetEmotion);
-    if (playlistType === "Trajectory") {
-      await generateLyricsAndSong(newTargetEmotion, nextSessionIdx);
-    } else {
-      await generateSavedPlaylist(newTargetEmotion, nextSessionIdx);
+      const { playlistType, targetEmotion: newTargetEmotion } = newPlaylistDef;
+      setActivityValue(nextActivity);
+      setTargetEmotion(newTargetEmotion);
+      if (playlistType === "Trajectory") {
+        await generateLyricsAndSong(newTargetEmotion, nextPlaylistIdx);
+      } else {
+        await generateSavedPlaylist(newTargetEmotion, nextPlaylistIdx);
+      }
+    } catch (err: any) {
+      console.error("Error while starting next playlist: ", err?.message);
     }
 
     setLoading(false);
   };
 
   const handleNextSong = () => {
-    if (currentSongIndex === songQueue.length - 1) return;
+    if (currentSongIndex === songQueue.length - 1 || !ratingDone) return;
     setCurrentSongIndex((i) => i + 1);
   };
 
@@ -700,7 +777,8 @@ export default function ParticipantsScreen() {
 
     try {
       const sessionId = await getSessionId();
-      const trackRes = await addTrackToSession(
+      const trajectoryID = await getTrajectoryId();
+      const trackRes = await addTrackToTrajectory(
         user?.email!,
         sessionId,
         nextSongIdx,
@@ -716,6 +794,7 @@ export default function ParticipantsScreen() {
           suggestedAiMusicStyle: suggestedMusicStyle || "",
         },
         true,
+        trajectoryID,
       );
 
       await saveTrackId(trackRes?.id!, trackRes?.songIdx || 0);
@@ -738,9 +817,9 @@ export default function ParticipantsScreen() {
       return;
     }
 
-    const track = await fetchSavedPlaylistTrack(nextSongIdx);
+    await fetchWeatherAndNews();
+    const track = await fetchSavedPlaylistTrack(targetEmotion || "calm");
     if (!track) {
-      setLoading(false);
       setNextSongLoading(false);
       return;
     }
@@ -753,7 +832,8 @@ export default function ParticipantsScreen() {
       const latestHealthData = await fetchAppleHealthData(5);
 
       const sessionId = await getSessionId();
-      const trackRes = await addTrackToSession(
+      const trajectoryID = await getTrajectoryId();
+      const trackRes = await addTrackToTrajectory(
         user?.email!,
         sessionId,
         nextSongIdx,
@@ -764,6 +844,7 @@ export default function ParticipantsScreen() {
           steps: latestHealthData?.steps || "N/A",
         },
         true,
+        trajectoryID,
       );
 
       await saveTrackId(trackRes?.id!, trackRes?.songIdx || 0);
@@ -778,6 +859,7 @@ export default function ParticipantsScreen() {
     try {
       const trackId = await getTrackId(index);
       const sessionId = await getSessionId();
+      const trajectoryID = await getTrajectoryId();
 
       if (trackId) {
         await updateTrackFields(
@@ -788,6 +870,7 @@ export default function ParticipantsScreen() {
             ...updates,
           },
           true,
+          trajectoryID,
         );
       }
     } catch (err) {
@@ -801,54 +884,21 @@ export default function ParticipantsScreen() {
     setRatingUnlocked(false);
     setShowRatingAlert(false);
     await updateTrackInDB({ liked: rating === "up" }, idx);
-
-    if (playlistType === "Trajectory") {
-      await generateNextSong();
-    } else {
-      await generateNextSavedTrack();
-    }
-  };
-
-  const fetchWeatherAndNews = async (
-    firstCall: boolean = false,
-  ): Promise<{ weather: WeatherData | null; news: NewsData | null } | null> => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") return null;
-
-    let loc = await Location.getCurrentPositionAsync({});
-    if (firstCall) console.log("location set");
-
-    const weather = await fetchWeatherData(
-      loc.coords.latitude,
-      loc.coords.longitude,
-    );
-    setWeatherData(weather);
-
-    let news = null;
-    news = await fetchUniqueNewsData(weather?.city);
-
-    // If news data isn't available for a particular country-code, then try 'US' as fallback
-    if (!news) {
-      news = await fetchUniqueNewsData("us");
-    }
-    setNewsData(news);
-
-    return { weather, news };
   };
 
   const handleNavigate = () => {
-    const currSessionFeedback = feedbackSubmitted?.[sessionIdx];
-    const sessionIdxProp =
-      currSessionFeedback?.pre && currSessionFeedback?.post
-        ? sessionIdx + 1
-        : sessionIdx;
+    const currPlaylistFeedback = feedbackSubmitted?.[playlistIdx];
+    const playlistIdxProp =
+      currPlaylistFeedback?.pre && currPlaylistFeedback?.post
+        ? playlistIdx + 1
+        : playlistIdx;
 
     navigation.navigate({
       name: "Feedback",
       params: {
         storeInDb:
-          feedbackSubmitted?.[sessionIdxProp]?.pre && currSessionFinished,
-        sessionIdx: sessionIdxProp,
+          feedbackSubmitted?.[playlistIdxProp]?.pre && currPlaylistFinished,
+        playlistIdx: playlistIdxProp,
       },
     } as never);
   };
@@ -856,10 +906,6 @@ export default function ParticipantsScreen() {
   // Fetch news and weather info
   useEffect(() => {
     fetchWeatherAndNews(true);
-
-    (async () => {
-      await clearFeedbackSubmitted();
-    })();
   }, []);
 
   // Update listening time of user for current song
@@ -919,6 +965,7 @@ export default function ParticipantsScreen() {
   useEffect(() => {
     const index = currentSongIndex;
     if (playerStatus.didJustFinish) {
+      setSongJustFinished(true);
       if (songRatings[currentSongIndex] === undefined) {
         setRatingUnlocked(true);
         setShowRatingAlert(true);
@@ -936,10 +983,13 @@ export default function ParticipantsScreen() {
 
   // Start generating next song once listening threshold reaches
   useEffect(() => {
-    if (generateTimerRef.current) {
-      clearTimeout(generateTimerRef.current);
-      generateTimerRef.current = null;
-    }
+    const clearGenerateTimerInterval = () => {
+      if (generateTimerRef.current) {
+        clearInterval(generateTimerRef.current);
+        generateTimerRef.current = null;
+      }
+    };
+    clearGenerateTimerInterval();
 
     if (
       !playerStatus.playing ||
@@ -952,18 +1002,23 @@ export default function ParticipantsScreen() {
 
     generateTimerRef.current = setTimeout(() => {
       console.log(
-        `--Listen threshold reached. Rating unlocked for index ${currentSongIndex}`,
+        `--Listen threshold reached. Generating next song for index ${currentSongIndex}`,
       );
 
-      setRatingUnlocked(true);
       setGenerationLockedForIndex(currentSongIndex);
+      if (playlistType === "Trajectory") {
+        generateNextSong();
+      } else {
+        generateNextSavedTrack();
+      }
     }, LISTEN_BEFORE_GENERATE_MS);
 
+    setTimeout(() => {
+      setRatingUnlocked(true);
+    }, 10_000);
+
     return () => {
-      if (generateTimerRef.current) {
-        clearTimeout(generateTimerRef.current);
-        generateTimerRef.current = null;
-      }
+      clearGenerateTimerInterval();
     };
   }, [playerStatus.playing, currentSongIndex, currentSong?.audioUrl]);
 
@@ -971,6 +1026,7 @@ export default function ParticipantsScreen() {
   useEffect(() => {
     setGenerationLockedForIndex(null);
     setRatingUnlocked(false);
+    setSongJustFinished(false);
   }, [currentSongIndex]);
 
   // Download finalURL song when it's ready
@@ -1067,7 +1123,7 @@ export default function ParticipantsScreen() {
     }, 300);
   }, [currentSongLyrics]);
 
-  // Unlocks start next session button once user has given a feedback
+  // Unlocks start next playlist button once user has given a feedback
   useFocusEffect(
     useCallback(() => {
       getFeedbackSubmitted().then((val) => {
@@ -1298,17 +1354,6 @@ export default function ParticipantsScreen() {
           </View>
         </>
       )}
-      {nextSongLoading && (
-        <LoadingPhrases
-          style={{ marginTop: 30 }}
-          phrases={[
-            "Composing your next song...",
-            "Weaving melodies to match your mood...",
-            "Crafting lyrics just for this moment...",
-            "Almost ready — your song is taking shape...",
-          ]}
-        />
-      )}
 
       {/* Thumbs Up/Down buttons */}
       {ratingUnlocked && (
@@ -1362,13 +1407,49 @@ export default function ParticipantsScreen() {
         </Text>
       )}
 
-      {/* Review button */}
-      {showReviewButton && (
-        <View style={[styles.section, { marginTop: 40 }]}>
-          {allSessionsCompleted && (
+      {/* Loading Phrases for next song */}
+      {nextSongLoading && songJustFinished && (
+        <LoadingPhrases
+          style={{ marginTop: 30 }}
+          phrases={[
+            "Composing your next song...",
+            "Weaving melodies to match your mood...",
+            "Crafting lyrics just for this moment...",
+            "Almost ready — your song is taking shape...",
+          ]}
+        />
+      )}
+
+      {/* Next Activity Label */}
+      {!!nextActivity && (
+        <View
+          style={[
+            styles.section,
+            {
+              marginTop: 40,
+              flexDirection: "row",
+              gap: 4,
+              justifyContent: "flex-start",
+              alignItems: "center",
+            },
+          ]}
+        >
+          <Text style={{ color: C.text, fontSize: 15 }}>
+            Activity for next playlist:
+          </Text>
+          <Text style={styles.sectionTitle}>
+            {activitySequence[playlistIdx + 1]}
+          </Text>
+        </View>
+      )}
+
+      {/* Mood meter button */}
+      {showMoodMeterButton && (
+        <View style={[styles.section, !nextActivity && { marginTop: 40 }]}>
+          {allPlaylistsCompleted && (
             <View style={styles.sectionHead}>
               <Text style={styles.sectionTitle}>
-                {`You've completed all sessions. We'd love your feedback!`}
+                {`You've completed all the playlists of this session. Please update the mood meter!`}
               </Text>
             </View>
           )}
@@ -1383,22 +1464,11 @@ export default function ParticipantsScreen() {
             <Text
               style={[styles.startBtnText, { color: "#B07FE0", fontSize: 18 }]}
             >
-              Leave a Review
+              Update mood meter
             </Text>
           </Pressable>
         </View>
       )}
-      {/* <Pressable
-        onPress={handleNavigate}
-        style={[
-          styles.startBtn,
-          { borderWidth: 1, backgroundColor: "#1E1235" },
-        ]}
-      >
-        <Text style={[styles.startBtnText, { color: "#B07FE0", fontSize: 18 }]}>
-          Leave a Review
-        </Text>
-      </Pressable> */}
 
       {/* Start button */}
       {phase === "setup" && !currentSong && (
@@ -1431,31 +1501,31 @@ export default function ParticipantsScreen() {
         </>
       )}
 
-      {/* Next Session button */}
-      {currSessionFinished && !allSessionsCompleted && ratingDone && (
+      {/* Next Playlist button */}
+      {currPlaylistFinished && !allPlaylistsCompleted && ratingDone && (
         <View style={[styles.section, { marginTop: 60 }]}>
           <View style={styles.sectionHead}>
-            <Text style={styles.sectionTitle}>{nextSessionMsg}</Text>
+            <Text style={styles.sectionTitle}>{nextPlaylistMsg}</Text>
           </View>
 
           <Pressable
-            onPress={startNextSession}
-            disabled={nextSessionBtnDisabled}
+            onPress={startNextPlaylist}
+            disabled={nextPlaylistBtnDisabled}
             style={[
               styles.startBtn,
-              nextSessionBtnDisabled && { opacity: 0.35 },
+              nextPlaylistBtnDisabled && { opacity: 0.35 },
             ]}
           >
-            <Text style={styles.startBtnText}>Start Next session</Text>
+            <Text style={styles.startBtnText}>Start Next Playlist</Text>
             {loading && <ActivityIndicator color="#fff" size={30} />}
           </Pressable>
         </View>
       )}
-      {!currSessionFinished && loading && phase !== "setup" && (
+      {!currPlaylistFinished && loading && phase !== "setup" && (
         <LoadingPhrases
           style={{ marginTop: 30 }}
           phrases={[
-            "Setting the stage for your next session...",
+            "Setting the stage for your next playlist...",
             "Tuning into your emotional space...",
             "Preparing a personalized experience for you...",
             "Getting everything ready — just a moment...",
@@ -1513,6 +1583,17 @@ export default function ParticipantsScreen() {
           </Text>
         </View>
       )} */}
+      {/* <Pressable
+        onPress={handleNavigate}
+        style={[
+          styles.startBtn,
+          { borderWidth: 1, backgroundColor: "#1E1235" },
+        ]}
+      >
+        <Text style={[styles.startBtnText, { color: "#B07FE0", fontSize: 18 }]}>
+          {`Update mood meter (Test)`}
+        </Text>
+      </Pressable> */}
     </ScrollView>
   );
 }

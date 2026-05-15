@@ -1,17 +1,23 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { UserProfile } from "@/constants/appConstants";
+import { AI_TRAJECTORY_LENGTH, UserProfile } from "@/constants/appConstants";
 
 const USER_KEY = "@user_profile";
 const SESSION_KEY = "@session_id";
 const TRACK_KEY = "@track_ids";
 const FEEDBACK_KEY = "@feedback_submitted";
-const SESSION_FEEDBACK_KEY = "@session_feedback";
-const DEVICE_ID_KEY = "@ble_hr_device_id";
-
+const PLAYLIST_FEEDBACK_KEY = "@playlist_feedback";
+const TRAJECTORY_ID_KEY = "@trajectory_id";
+const PRE_GEN_PLAYLIST_KEY = "@pre_gen_playlist";
+const VOCAL_GENDER_COUNTS_KEY = "@vocal_gender_counts";
 
 export interface FeedbackSubmittedStatus {
   pre: boolean;
   post: boolean;
+}
+
+interface PgPlaylistEmotionIds {
+  calm: string[];
+  joyful: string[];
 }
 
 export const saveUserLocal = async (user: UserProfile) => {
@@ -38,11 +44,21 @@ export const clearSessionId = async () => {
   await AsyncStorage.removeItem(SESSION_KEY);
 };
 
+// Methods for TrajectoryID
+export const saveTrajectoryId = async (id: string | null) => {
+  if (!id) return;
+  await AsyncStorage.setItem(TRAJECTORY_ID_KEY, id);
+};
+export const getTrajectoryId = async (): Promise<string | null> => {
+  const id = await AsyncStorage.getItem(TRAJECTORY_ID_KEY);
+  return id || null;
+};
+export const clearTrajectoryId = async () => {
+  await AsyncStorage.removeItem(TRAJECTORY_ID_KEY);
+};
+
 // Methods for TrackID
-export const getTrackIdsObject = async (): Promise<Record<
-  string,
-  string
-> | null> => {
+const getTrackIdsObject = async (): Promise<Record<string, string> | null> => {
   const raw = await AsyncStorage.getItem(TRACK_KEY);
   return raw ? JSON.parse(raw) : null;
 };
@@ -64,10 +80,10 @@ export const clearTrackIds = async () => {
 // Methods to mutate feedback submission value
 export const saveFeedbackSubmitted = async (
   type: "pre" | "post",
-  sessionIdx: number,
+  playlistIdx: number,
 ): Promise<void> => {
   const feedbackSubmittedMap = (await getFeedbackSubmitted()) || {};
-  const currFeedbackStatus = feedbackSubmittedMap?.[sessionIdx] || {
+  const currFeedbackStatus = feedbackSubmittedMap?.[playlistIdx] || {
     pre: false,
     post: false,
   };
@@ -75,7 +91,7 @@ export const saveFeedbackSubmitted = async (
 
   const newFeedbackMap = {
     ...feedbackSubmittedMap,
-    [sessionIdx]: currFeedbackStatus,
+    [playlistIdx]: currFeedbackStatus,
   };
   await AsyncStorage.setItem(
     FEEDBACK_KEY,
@@ -93,22 +109,75 @@ export const clearFeedbackSubmitted = async (): Promise<void> => {
   await AsyncStorage.removeItem(FEEDBACK_KEY);
 };
 
-// Methods to mutate Participants Music Sessions Feedback
-export const saveSessionFeedback = async (feedback: object) => {
-  await AsyncStorage.setItem(SESSION_FEEDBACK_KEY, JSON.stringify(feedback));
+// Methods to mutate Participants Music Playlists Feedback
+export const savePlaylistFeedback = async (feedback: object) => {
+  await AsyncStorage.setItem(PLAYLIST_FEEDBACK_KEY, JSON.stringify(feedback));
 };
-export const getSessionFeedback = async (): Promise<object | null> => {
-  const raw = await AsyncStorage.getItem(SESSION_FEEDBACK_KEY);
+export const getPlaylistFeedback = async (): Promise<object | null> => {
+  const raw = await AsyncStorage.getItem(PLAYLIST_FEEDBACK_KEY);
   return raw ? JSON.parse(raw) : null;
 };
-export const clearSessionFeedback = async () => {
-  await AsyncStorage.removeItem(SESSION_FEEDBACK_KEY);
+export const clearPlaylistFeedback = async () => {
+  await AsyncStorage.removeItem(PLAYLIST_FEEDBACK_KEY);
 };
 
-// Methods to mutate device id used in BLE
-export const saveDeviceId = async (id: string) => {
-  await AsyncStorage.setItem(DEVICE_ID_KEY, id);
+// Methods for mutating already played pre generated playlist songs IDs
+const getPgpIds = async (): Promise<PgPlaylistEmotionIds> => {
+  const raw = await AsyncStorage.getItem(PRE_GEN_PLAYLIST_KEY);
+  return raw ? JSON.parse(raw) : { calm: [], joyful: [] };
 };
-export const getSavedDeviceId = async () => {
-  return await AsyncStorage.getItem(DEVICE_ID_KEY);
+export const savePgpIds = async (
+  type: "calm" | "joyful",
+  id: string,
+): Promise<void> => {
+  if (!id) return;
+  const playedIds = await getPgpIds();
+  const specificEmotionIds = [...playedIds[type], id];
+
+  await AsyncStorage.setItem(
+    PRE_GEN_PLAYLIST_KEY,
+    JSON.stringify({ ...playedIds, [type]: [...specificEmotionIds] }),
+  );
+};
+export const getPgpIdsOfEmotion = async (
+  type: "calm" | "joyful",
+): Promise<string[]> => {
+  const playedIds = await getPgpIds();
+  return playedIds?.[type] || [];
+};
+export const clearPgpIds = async () => {
+  await AsyncStorage.removeItem(PRE_GEN_PLAYLIST_KEY);
+};
+
+// Methods for mutating vocal gender counts
+export const getVocalGender = async (): Promise<string> => {
+  const raw = await AsyncStorage.getItem(VOCAL_GENDER_COUNTS_KEY);
+  const counts = raw ? JSON.parse(raw) : {};
+
+  const mCount = Number(counts?.m || "0");
+  const fCount = Number(counts?.f || "0");
+
+  let vocal;
+  const limit = AI_TRAJECTORY_LENGTH / 2;
+  if (mCount >= limit) {
+    vocal = "f";
+  } else if (fCount >= limit) {
+    vocal = "m";
+  } else {
+    vocal = Math.random() < 0.5 ? "m" : "f";
+  }
+
+  const newCounts = {
+    m: vocal === "m" ? mCount + 1 : mCount,
+    f: vocal === "f" ? fCount + 1 : fCount,
+  };
+  await AsyncStorage.setItem(
+    VOCAL_GENDER_COUNTS_KEY,
+    JSON.stringify(newCounts),
+  );
+
+  return vocal;
+};
+export const clearVocalGenderCounts = async () => {
+  await AsyncStorage.removeItem(VOCAL_GENDER_COUNTS_KEY);
 };

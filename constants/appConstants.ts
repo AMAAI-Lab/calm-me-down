@@ -36,7 +36,7 @@ export interface LyricsResult {
 }
 
 export const DEBUG_MODE = false;
-export const LISTEN_BEFORE_GENERATE_MS = 10000;
+export const LISTEN_BEFORE_GENERATE_MS = 2000;
 export const CONTINUOUS_PLAYBACK_MS = 5000;
 
 export const EMOTION_MAP: EmotionPoint[] = [
@@ -490,3 +490,469 @@ export const EMOTION_GRID: string[][] = [
   ["Sad", "Lonely", "Helpless", "Bored"],
   ["Gentle", "Relaxed", "Comforting", "Peaceful"],
 ];
+
+export const PRE_GENERATED_PLAYLIST = {
+  calm: [
+    {
+      id: "1",
+      title: "Tate McRae, Jeremy Zucker - that way",
+      audioUrl:
+        "https://www.image2url.com/r2/default/audio/1778741665093-59d08d61-3a82-48ca-9479-3250af7d8c09.mp3",
+      provider: "MOCK",
+      lyrics: `
+        Run me in circles
+        Like you always do
+        Mess with me on purpose
+        So I'll hang onto you
+
+        I know what you mean when you act like that
+        You don't know it's breaking my heart
+        Said that it was just never gonna happen
+        Then almost kissed me in the dark
+        Every time we talk, it just hurts so bad
+        'Cause I don't even know what we are
+        I don't even know where to start
+        But I can play the part
+
+        We say we're friends, but I'm catching you across the room
+        It makes no sense, 'cause we're fighting over what we do
+        And there's no way that I'll end up being with you
+        But friends don't look at friends that way
+        Friends don't look at friends that way
+
+        Can't even tell if
+        I love or hate you more
+        You've got me addicted
+        And I can't tell who's keeping score
+
+        I know what you mean when you act like that
+        You don't know it's breaking my heart
+        Said that it was just never gonna happen
+        Then almost kissed me in the dark
+        Every time we talk, it just hurts so bad
+        'Cause I don't even know what we are
+        I don't even know where to start
+        But I can play the part
+
+        We say we're friends, but I'm catching you across the room
+        It makes no sense, 'cause we're fighting over what we do
+        And there's no way that I'll end up being with you
+        But friends don't look at friends that way
+
+        Friends don't look at friends that way
+        Friends don't look at friends that way
+        Friends don't look at friends that way
+        Mm-mm, ayy
+
+        We say we're friends, but I'm catching you across the room
+        It makes no sense, 'cause we're fighting over what we do
+        And there's no way that I'll end up being with you
+        But friends don't look at friends that way
+
+        Friends don't look at friends that way
+      `,
+    },
+    {
+      id: "2",
+      title: "At My Worst",
+      audioUrl:
+        "https://www.image2url.com/r2/default/audio/1778741914719-94c8546e-53b0-4f6c-be1b-cdff7a290df4.mp3",
+      provider: "MOCK",
+      lyrics: `
+        Can I call you baby?
+        Can you be my friend?
+        Can you be my lover up until the very end?
+        Let me show you love, oh, I don't pretend
+        Stick by my side even when the world is givin' in, yeah
+
+        Oh, oh, oh, don't
+        Don't you worry
+        I'll be there, whenever you want me
+
+        I need somebody who can love me at my worst
+        No, I'm not perfect, but I hope you see my worth
+        'Cause it's only you, nobody new, I put you first
+        And for you, girl, I swear I'd do the worst
+
+        If you stay forever, let me hold your hand
+        I can fill those places in your heart no else can
+        Let me show you love, oh, no pretend, yeah
+        I'll be right here, baby, you know it's sink or swim
+
+        Oh, oh, oh, don't
+        Don't you worry
+        I'll be there, whenever you want me
+
+        I need somebody who can love me at my worst
+        No, I'm not perfect, but I hope you see my worth, yeah
+        'Cause it's only you, nobody new, I put you first (you first)
+        And for you, girl, I swear I'd do the worst
+
+        I need somebody who can love me at my worst
+        No, I'm not perfect, but I hope you see my worth
+        'Cause it's only you, nobody new, I put you first
+        And for you, girl, I swear I'd do the worst
+      `,
+    },
+    {
+      id: "3",
+      title: "Lonely",
+      audioUrl:
+        "https://www.image2url.com/r2/default/audio/1778741966574-c4a1b2d7-866b-4fb7-a60e-939f54a62e3f.mp3",
+      provider: "MOCK",
+      lyrics: `
+        Everybody knows my name now
+        But somethin' 'bout it still feels strange
+        Like lookin' in a mirror, tryna steady yourself
+        And seein' somebody else
+
+        And everything is not the same now
+        It feels like all our lives have changed
+        Maybe when I'm older, it'll all calm down
+        But it's killin' me now
+
+        What if you had it all
+        But nobody to call?
+        Maybe then you'd know me
+        'Cause I've had everything
+        But no one's listening
+        And that's just lonely
+
+        I'm so lonely
+        Lonely
+
+        Everybody knows my past now
+        Like my house was always made of glass
+        And maybe that's the price you pay
+        For the money and fame at an early age
+
+        And everybody saw me sick
+        And it felt like no one gave
+        They criticized the things I did as an idiot kid
+
+        What if you had it all
+        But nobody to call?
+        Maybe then you'd know me
+        'Cause I've had everything
+        But no one's listening
+        And that's just lonely
+
+        I'm so lonely
+        Lonely
+        I'm so lonely
+        Lonely
+      `,
+    },
+    {
+      id: "4",
+      title: "Til Death Do Us Part",
+      audioUrl:
+        "https://www.image2url.com/r2/default/audio/1778742015318-04cddb11-6476-4756-b5a0-70e3ca0728cc.mp3",
+      provider: "MOCK",
+      lyrics: `
+        We lost our broken pieces on the floor
+        I tried but can't put them back no more
+        All those stolen nights that I can't let go of
+        I hate the fact that you're all I know
+
+        3am again when you're calling me up
+        You say you know we gotta talk
+        Then you get in my head
+        Breakup then we makeup
+        Every other weekend
+        You know that I'll be there til the end
+
+        To love and to cherish
+        Then tear me apart
+        Through health and in sickness
+        The hell kinda love
+        For richer for poorer
+        But tears come for free
+        So go ahead and break my heart
+
+        Off and on
+        Til death do us part
+        Ohhhh
+        Off and on til death do us part
+        Ohhhh
+        Off and on till death do us part
+        
+        If I could go back to before we met
+        I'd take that train no questions said
+        But the way we locked eyes
+        Got me missing all your lies
+        But it's hard for me to not call you mine
+
+        To love and to cherish
+        Then tear me apart
+        Through health and in sickness
+        The hell kinda love
+        For richer for poorer
+        But tears come for free
+        So go ahead and break my heart
+
+        Off and on
+        Til death do us part
+        Ohhhh
+        Off and on til death do us part
+        Ohhhh
+        Off and on til death do us part
+
+        3am again when you calling me up
+        You say you know we gotta talk
+        Then you get in my head
+        Breakup then we makeup
+        Every other weekend
+        You know that I'll be there til the end
+        Off and on til death do us part
+      `,
+    },
+  ],
+  joyful: [
+    {
+      id: "1",
+      title: "As It Was",
+      audioUrl:
+        "https://www.image2url.com/r2/default/audio/1778742697895-6009e483-ed3b-4d88-ba19-0b9519eb530c.mp3",
+      provider: "MOCK",
+      lyrics: `
+        Holdin' me back
+        Gravity's holdin' me back
+        I want you to hold out the palm of your hand
+        Why don't we leave it at that?
+        Nothin' to say
+        When everything gets in the way
+        Seems you cannot be replaced
+        And I'm the one who will stay, oh-oh-oh
+
+        In this world, it's just us
+        You know it's not the same as it was
+        In this world, it's just us
+        You know it's not the same as it was
+        As it was, as it was
+        You know it's not the same
+
+        Answer the phone
+        "Harry, you're no good alone
+        Why are you sittin' at home on the floor?
+        What kind of pills are you on?"
+        Ringin' the bell
+        And nobody's comin' to help
+        Your daddy lives by himself
+        He just wants to know that you're well, oh-oh-oh
+
+        In this world, it's just us
+        You know it's not the same as it was
+        In this world, it's just us
+        You know it's not the same as it was
+        As it was, as it was
+        You know it's not the same
+
+        Go home, get ahead, light-speed internet
+        I don't wanna talk about the way that it was
+        Leave America, two kids follow her
+        I don't wanna talk about who's doin' it first
+
+        As it was
+        You know it's not the same as it was
+        As it was, as it was
+      `,
+    },
+    {
+      id: "2",
+      title: "Belong Together",
+      audioUrl:
+        "https://www.image2url.com/r2/default/audio/1778742816618-73a263f3-34e7-476c-81b7-530e1ad320d2.mp3",
+      provider: "MOCK",
+      lyrics: `
+        I know sleep is friends with death
+        But maybe I should get some rest
+        'Cause I've been out here workin' all damn day
+        Blueberries and butterflies
+        The pretty things that greet my eyes
+        When you call and I say, "I'm on my way"
+
+        You and me belong together
+        Like cold iced tea and warmer weather
+        Where we lay out late underneath the pines
+        And we still have fun when the sun won't shine
+        You and me belong together all the time
+
+        Spillin' wine and homemade drinks
+        We throw a cheers, the worries sink
+        Damnit, it's so good to be alive
+        We know that we don't got much
+        But, then again, it's just enough
+        To always find a way for a good time
+
+        You and me belong together
+        Like cold iced tea and warmer weather
+        Where we lay out late underneath the pines
+        And we still have fun when the sun won't shine
+        You and me belong together
+
+        This love is all we need
+        Oh, we've got so much
+        You and me, oh
+
+        You and me belong together
+        Like cold iced tea and warmer weather
+        Where we lay out late underneath the pines
+        And we still have fun when the sun won't shine
+        You and me belong together all the time
+        
+        It goes on and on and on (hey)
+        It goes on and on and on
+        It goes on and on and on (woo)
+      `,
+    },
+    {
+      id: "3",
+      title: "Ain't No Mountain High Enough",
+      audioUrl:
+        "https://www.image2url.com/r2/default/audio/1778742870579-f7949513-3682-49c6-8156-118d8e114959.mp3",
+      provider: "MOCK",
+      lyrics: `
+        Listen, baby
+        Ain't no mountain high
+        Ain't no vally low
+        Ain't no river wide enough, baby
+
+        If you need me, call me
+        No matter where you are
+        No matter how far
+        Just call my name
+        I'll be there in a hurry
+        You don't have to worry
+
+        * 'Cause baby,
+        There ain't no mountain high enough
+        Ain't no valley low enough
+        Ain't no river wide enough
+        To keep me from getting to you
+
+        Remember the day
+        I set you free
+        I told you
+        You could always count on me
+        From that day on I made a vow
+        I'll be there when you want me
+        Some way,some how
+
+        [Repeat *]
+
+        No wind, no rain
+
+        My love is alive
+        Way down in my heart
+        Although we are miles apart
+        If you ever need a helping hand
+        I'll be there on the double
+        As fast as I can
+
+        ** Don't you know that
+        There ain't no mountain high enough
+        Ain't no valley low enough
+        Ain't no river wide enough
+        (To keep me from getting to you)
+
+        [Repeat **]
+      `,
+    },
+    {
+      id: "4",
+      title: "Until I Found You",
+      audioUrl:
+        "https://www.image2url.com/r2/default/audio/1778743282741-9c175eb7-b8d2-4cea-b8bd-31ca17c348ae.mp3",
+      provider: "MOCK",
+      lyrics: `
+        Georgia, wrap me up in all your
+        I want you in my arms
+        Oh, let me hold you
+        I'll never let you go again like I did
+        Oh, I used to say
+
+        I would never fall in love again until I found her
+        I said, "I would never fall unless it's you I fall into"
+        I was lost within the darkness, but then I found her
+        I found you
+
+        Georgia, pulled me in, I asked to
+        Love her once again
+        You fell, I caught you
+        I'll never let you go again like I did
+        Oh, I used to say
+
+        I would never fall in love again until I found her
+        I said, "I would never fall unless it's you I fall into"
+        I was lost within the darkness, but then I found her
+        I found you
+
+        I would never fall in love again until I found her
+        I said, "I would never fall unless it's you I fall into"
+        I was lost within the darkness, but then I found her
+        I found you
+      `,
+    },
+    {
+      id: "5",
+      title: "So Easy (To Fall In Love)",
+      audioUrl:
+        "https://www.image2url.com/r2/default/audio/1776774880658-0fced3b3-4ea6-4258-8504-734b74992e22.mp3",
+      provider: "MOCK",
+      lyrics: `
+        I could be the twist, the one to make you stop
+        The icing on your cake, the cherry on the top
+        There's Heaven in my heart, and we could find you some space
+        Mm-mm
+        I could be the world to you, the missing piece
+        The extra sentimental kind of chemistry
+        Some people make it hard, with me, that isn't the case
+
+        'Cause I make it so easy to fall in love
+        So, come give me a call, and we'll fall into us
+        I'm the perfect mix of Saturday night and the rest of your life
+        Anyone with a heart would agree
+        It's so easy
+        To fall in love with
+
+        The way I do my hair, the way I make you laugh
+        The way we like to share a walk in Central Park
+        I could be fresh air, might be the girl of your dreams (dream, dream, dream, dreams)
+        There's no need to hide if you're into me
+        'Cause I'm into you quite intimately
+        And maybe one night could turn into three
+        Well, I'm down to see
+
+        'Cause I make it so easy to fall in love
+        So, come give me a call, and we'll fall into us
+        I'm the perfect mix of Saturday night and the rest of your life
+        Anyone with a heart would agree
+        It's so easy
+        To fall in love with me
+
+        Me
+        Me (me)
+        Me
+        Me (me)
+        Me
+        Me (me)
+        Me
+        Me
+        It's so easy (me, me)
+        It's so easy (me, me)
+        It's so easy (me, me)
+        Yeah, yeah (me, me)
+        
+        So easy to fall in love
+        So, come give me a call, and we'll fall into us
+        I'm the perfect mix of Saturday night and the rest of your life
+        Anyone with a heart would agree
+        It's so easy
+        To fall in love with me
+      `,
+    },
+  ],
+};
+
+export const AI_TRAJECTORY_LENGTH = 4;

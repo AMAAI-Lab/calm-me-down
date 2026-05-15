@@ -12,7 +12,7 @@ import {
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const TRACK_WIDTH = SCREEN_WIDTH - 80;
 const THUMB_SIZE = 28;
-const STEPS = 5;
+const STEPS = 7;
 
 export function ScaleRating({
   value,
@@ -95,7 +95,7 @@ export function ScaleRating({
     snapAnimTo(stepped);
   };
 
-  const STEP_LABELS = ["1", "2", "3", "4", "5"];
+  const STEP_LABELS = ["1", "2", "3", "4", "5", "6", "7"];
 
   const fillWidth = pan.interpolate({
     inputRange: [0, TRACK_WIDTH - THUMB_SIZE],
@@ -177,7 +177,7 @@ export function ScaleRating({
       )}
 
       {/* Hint */}
-      {value > 0 && (
+      {(value === 1 || value === STEPS) && (
         <Text
           style={[
             sliderStyles.hint,
@@ -239,9 +239,10 @@ const sliderStyles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   stepLabelsRow: {
+    width: TRACK_WIDTH,
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: THUMB_SIZE / 2 - 4,
+    paddingHorizontal: THUMB_SIZE / 2 - 8,
   },
   stepLabel: {
     color: "#3D2F5A",

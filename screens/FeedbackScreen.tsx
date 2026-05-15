@@ -1,30 +1,36 @@
-import { ScaleRating } from "@/components/ui/arousal-valence-feedback";
 import { useAuth } from "@/context/AuthContext";
-import { updateMusicSession } from "@/services/DbService";
+import { updateMusicTrajectory } from "@/services/DbService";
 import {
-  clearSessionFeedback,
+  getPlaylistFeedback,
   getSessionId,
+  getTrajectoryId,
   saveFeedbackSubmitted,
-  saveSessionFeedback,
+  savePlaylistFeedback,
 } from "@/services/LocalUserService";
 import { useRoute } from "@react-navigation/native";
 import { useNavigation } from "expo-router";
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
   ScrollView,
   Animated,
   Platform,
   KeyboardAvoidingView,
   StatusBar,
+  Dimensions,
+  PanResponder,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-export function Card({
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const TRACK_WIDTH = SCREEN_WIDTH - 80;
+const THUMB_SIZE = 28;
+const STEPS = 7;
+
+function Card({
   label,
   icon,
   children,
@@ -44,99 +50,263 @@ export function Card({
   );
 }
 
-const THREE_OPTIONS = [
-  { label: "Not really", icon: "✕" },
-  { label: "Somewhat", icon: "〜" },
-  { label: "Yes!", icon: "✓" },
-];
-const TAP_COLORS = ["#E05C8A", "#9B59B6", "#4ECDC4"];
-
-function ThreeTap({
+function ScaleRating({
   value,
   onChange,
+  lowLabel,
+  highLabel,
+  hints = [
+    "1 — Not at all",
+    "2 — Slightly",
+    "3 — Somewhat",
+    "4 — Quite",
+    "5 — Very much",
+  ],
+  isParticipantsScreen = true,
+  valueRestored = false,
 }: {
   value: number;
   onChange: (v: number) => void;
+  lowLabel?: string;
+  highLabel?: string;
+  hints?: string[];
+  isParticipantsScreen?: boolean;
+  valueRestored?: boolean;
 }) {
-  const t0 = useRef(new Animated.Value(1)).current;
-  const t1 = useRef(new Animated.Value(1)).current;
-  const t2 = useRef(new Animated.Value(1)).current;
-  const anims = [t0, t1, t2];
+  const positionForValue = (v: number) =>
+    v > 0 ? ((v - 1) / (STEPS - 1)) * (TRACK_WIDTH - THUMB_SIZE) : 0;
 
-  const handlePress = (i: number) => {
-    onChange(i);
-    Animated.sequence([
-      Animated.spring(anims[i], {
-        toValue: 1.06,
-        useNativeDriver: true,
-        speed: 50,
-        bounciness: 10,
-      }),
-      Animated.spring(anims[i], {
-        toValue: 1,
-        useNativeDriver: true,
-        speed: 20,
-      }),
-    ]).start();
+  const pan = useRef(
+    new Animated.Value(value > 0 ? positionForValue(value) : 0),
+  ).current;
+  const isDragging = useRef(false);
+
+  const snapToStep = (x: number): number => {
+    const clamped = Math.max(0, Math.min(x, TRACK_WIDTH - THUMB_SIZE));
+    const ratio = clamped / (TRACK_WIDTH - THUMB_SIZE);
+    return Math.round(ratio * (STEPS - 1)) + 1;
   };
 
+  const snapAnimTo = (v: number) => {
+    Animated.spring(pan, {
+      toValue: positionForValue(v),
+      useNativeDriver: false,
+      speed: 30,
+      bounciness: 6,
+    }).start();
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (_, gs) => {
+        isDragging.current = true;
+        // @ts-ignore
+        pan.setOffset(pan._value);
+        pan.setValue(0);
+      },
+      onPanResponderMove: (_, gs) => {
+        // @ts-ignore
+        const raw = pan._offset + gs.dx;
+        const clamped = Math.max(0, Math.min(raw, TRACK_WIDTH - THUMB_SIZE));
+        pan.setValue(clamped - (pan as any)._offset);
+        const stepped = snapToStep(clamped);
+        onChange(stepped);
+      },
+      onPanResponderRelease: (_, gs) => {
+        pan.flattenOffset();
+        // @ts-ignore
+        const stepped = snapToStep((pan as any)._value);
+        onChange(stepped);
+        snapAnimTo(stepped);
+        isDragging.current = false;
+      },
+    }),
+  ).current;
+
+  // Tap directly on the track to jump
+  const handleTrackTap = (e: any) => {
+    const tapX = e.nativeEvent.locationX - THUMB_SIZE / 2;
+    const stepped = snapToStep(tapX);
+    onChange(stepped);
+    snapAnimTo(stepped);
+  };
+
+  const STEP_LABELS = ["1", "2", "3", "4", "5", "6", "7"];
+
+  const fillWidth = pan.interpolate({
+    inputRange: [0, TRACK_WIDTH - THUMB_SIZE],
+    outputRange: [THUMB_SIZE / 2, TRACK_WIDTH - THUMB_SIZE / 2],
+    extrapolate: "clamp",
+  });
+
+  const sliderColor = isParticipantsScreen ? "#b36cff" : "#C4417A";
+
+  useEffect(() => {
+    if (!value) return;
+    snapAnimTo(value);
+  }, [valueRestored]);
+
   return (
-    <View style={tapStyles.row}>
-      {THREE_OPTIONS.map((opt, i) => (
-        <Animated.View
-          key={i}
-          style={{ flex: 1, transform: [{ scale: anims[i] }] }}
-        >
-          <TouchableOpacity
-            onPress={() => handlePress(i)}
-            activeOpacity={0.8}
+    <View style={sliderStyles.wrapper}>
+      <View style={sliderStyles.trackContainer} onTouchEnd={handleTrackTap}>
+        <View style={sliderStyles.trackBg} />
+
+        {value > 0 && (
+          <Animated.View
             style={[
-              tapStyles.btn,
-              value === i && {
-                backgroundColor: TAP_COLORS[i] + "22",
-                borderColor: TAP_COLORS[i],
-              },
+              sliderStyles.trackFill,
+              { width: fillWidth, backgroundColor: sliderColor },
+            ]}
+          />
+        )}
+
+        {/* Step dots */}
+        {STEP_LABELS.map((_, i) => {
+          const dotX =
+            (i / (STEPS - 1)) * (TRACK_WIDTH - THUMB_SIZE) + THUMB_SIZE / 2 - 4;
+          const isActive = value > 0 && i < value;
+          return (
+            <View
+              key={i}
+              style={[
+                sliderStyles.stepDot,
+                { left: dotX },
+                isActive && { backgroundColor: sliderColor },
+              ]}
+            />
+          );
+        })}
+
+        {/* Thumb */}
+        <Animated.View
+          style={[
+            sliderStyles.thumb,
+            {
+              left: pan,
+              opacity: value > 0 ? 1 : 0.35,
+              backgroundColor: sliderColor,
+              shadowColor: sliderColor,
+            },
+          ]}
+          {...panResponder.panHandlers}
+        >
+          <View style={sliderStyles.thumbInner} />
+        </Animated.View>
+      </View>
+
+      {/* Step number labels */}
+      <View style={sliderStyles.stepLabelsRow}>
+        {STEP_LABELS.map((lbl, i) => (
+          <Text
+            key={i}
+            style={[
+              sliderStyles.stepLabel,
+              value === i + 1 && { color: sliderColor },
             ]}
           >
-            <Text
-              style={[tapStyles.icon, value === i && { color: TAP_COLORS[i] }]}
-            >
-              {opt.icon}
-            </Text>
-            <Text
-              style={[
-                tapStyles.label,
-                value === i && { color: TAP_COLORS[i], fontWeight: "700" },
-              ]}
-            >
-              {opt.label}
-            </Text>
-          </TouchableOpacity>
-        </Animated.View>
-      ))}
+            {lbl}
+          </Text>
+        ))}
+      </View>
+
+      {/* Axis labels */}
+      {!!lowLabel && !!highLabel && (
+        <View style={sliderStyles.axisRow}>
+          <Text style={sliderStyles.axisLabel}>{lowLabel}</Text>
+          <Text style={sliderStyles.axisLabel}>{highLabel}</Text>
+        </View>
+      )}
+
+      {/* Hint */}
+      {(value === 1 || value === STEPS) && (
+        <Text
+          style={[
+            sliderStyles.hint,
+            { color: sliderColor },
+            isParticipantsScreen && { marginLeft: 10 },
+          ]}
+        >
+          {hints[value - 1]}
+        </Text>
+      )}
     </View>
   );
 }
-const tapStyles = StyleSheet.create({
-  row: { flexDirection: "row", gap: 10 },
-  btn: {
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: "#2A1F40",
-    backgroundColor: "#1A1030",
-    paddingVertical: 14,
+const sliderStyles = StyleSheet.create({
+  wrapper: { gap: 8, paddingTop: 8 },
+  trackContainer: {
+    width: TRACK_WIDTH,
+    height: 40,
+    justifyContent: "center",
+  },
+  trackBg: {
+    position: "absolute",
+    left: THUMB_SIZE / 2,
+    right: THUMB_SIZE / 2,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#1E1535",
+  },
+  trackFill: {
+    position: "absolute",
+    left: THUMB_SIZE / 2,
+    height: 4,
+    borderRadius: 2,
+  },
+  stepDot: {
+    position: "absolute",
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#2A1F40",
+    top: 16,
+  },
+  thumb: {
+    position: "absolute",
+    width: THUMB_SIZE,
+    height: THUMB_SIZE,
+    borderRadius: THUMB_SIZE / 2,
+    justifyContent: "center",
     alignItems: "center",
-    gap: 5,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 5,
   },
-  icon: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#4A3860",
+  thumbInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#fff",
   },
-  label: {
-    color: "#6A5580",
+  stepLabelsRow: {
+    width: TRACK_WIDTH,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: THUMB_SIZE / 2 - 8,
+  },
+  stepLabel: {
+    color: "#3D2F5A",
     fontSize: 12,
-    fontWeight: "500",
+    fontWeight: "600",
+    width: 16,
+    textAlign: "center",
+  },
+  axisRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 2,
+  },
+  axisLabel: {
+    color: "#4A3860",
+    fontSize: 11,
+  },
+  hint: {
+    fontSize: 13,
+    fontStyle: "italic",
+    marginTop: 2,
   },
 });
 
@@ -146,26 +316,18 @@ export default function FeedbackScreen() {
   const { user } = useAuth();
   const route = useRoute();
 
-  const { storeInDb = false, sessionIdx = 0 } = (route?.params || {}) as never;
+  const { storeInDb = false, playlistIdx = 0 } = (route?.params || {}) as never;
 
   const [arousal, setArousal] = useState(0);
   const [valence, setValence] = useState(0);
-  const [engaging, setEngaging] = useState(0);
-  const [personal, setPersonal] = useState(0);
-  const [targetMood, setTargetMood] = useState(-1);
-  const [review, setReview] = useState("");
 
   const [submitted, setSubmitted] = useState(false);
+  const [valueRestored, setValueRestored] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.85)).current;
 
-  const canSubmit =
-    arousal > 0 &&
-    valence > 0 &&
-    engaging > 0 &&
-    personal > 0 &&
-    targetMood >= 0;
+  const canSubmit = arousal > 0 && valence > 0;
 
   const handleSubmit = async () => {
     try {
@@ -188,28 +350,19 @@ export default function FeedbackScreen() {
       const feedbackData = {
         arousal,
         valence,
-        engaging,
-        personal,
-        targetMood: targetMood + 1,
-        review,
       };
 
+      await savePlaylistFeedback(feedbackData);
       if (!storeInDb) {
-        await saveSessionFeedback(feedbackData);
-        await saveFeedbackSubmitted("pre", sessionIdx || 0);
+        await saveFeedbackSubmitted("pre", playlistIdx || 0);
       } else {
         const sessionId = await getSessionId();
-        await updateMusicSession(
-          user?.email!,
-          sessionId,
-          {
-            feedbackAfter: feedbackData,
-          },
-          true,
-        );
+        const trajectoryId = await getTrajectoryId();
+        await updateMusicTrajectory(user?.email!, sessionId, trajectoryId, {
+          feedbackAfter: feedbackData,
+        });
 
-        await clearSessionFeedback();
-        await saveFeedbackSubmitted("post", sessionIdx || 0);
+        await saveFeedbackSubmitted("post", playlistIdx || 0);
       }
     } catch (err: any) {
       console.error("Error while saving session feedback in DB:", err?.message);
@@ -227,10 +380,21 @@ export default function FeedbackScreen() {
   const populateForm = () => {
     setArousal(7);
     setValence(7);
-    setEngaging(7);
-    setPersonal(7);
-    setTargetMood(2);
   };
+
+  useEffect(() => {
+    (async () => {
+      const { arousal = 0, valence = 0 } =
+        ((await getPlaylistFeedback()) as {
+          arousal: number;
+          valence: number;
+        }) || {};
+
+      setArousal(arousal);
+      setValence(valence);
+      setValueRestored(true)
+    })();
+  }, []);
 
   if (submitted) {
     return (
@@ -334,16 +498,21 @@ export default function FeedbackScreen() {
                 "4 ",
                 "5 ",
                 "6 ",
-                "7 - Very High"
+                "7 - Very High",
               ]}
               isParticipantsScreen={false}
+              valueRestored={valueRestored}
             />
 
             <View style={styles.dualDivider} />
 
             <View style={styles.dualSliderRow}>
-              <Text style={styles.dualSliderTitle}>☀️ Pleasant / Positive Mood</Text>
-              <Text style={styles.dualSliderSub}>Very Unpleasant/negative → Very Pleasant/ positive</Text>
+              <Text style={styles.dualSliderTitle}>
+                ☀️ Pleasant / Positive Mood
+              </Text>
+              <Text style={[styles.dualSliderSub, { marginTop: 4 }]}>
+                Very Unpleasant/negative → Very Pleasant/positive
+              </Text>
             </View>
             <ScaleRating
               value={valence}
@@ -355,49 +524,11 @@ export default function FeedbackScreen() {
                 "4 ",
                 "5 ",
                 "6 ",
-                "7 - Very Pleasant"
+                "7 - Very Pleasant",
               ]}
               isParticipantsScreen={false}
+              valueRestored={valueRestored}
             />
-          </Card>
-
-          <Card label="How engaging were the songs?" icon="🎧">
-            <ScaleRating
-              value={engaging}
-              onChange={setEngaging}
-              lowLabel="Boring"
-              highLabel="Captivating"
-              isParticipantsScreen={false}
-            />
-          </Card>
-
-          <Card label="Did the songs feel personal?" icon="💜">
-            <ScaleRating
-              value={personal}
-              onChange={setPersonal}
-              lowLabel="Generic"
-              highLabel="Just for me"
-              isParticipantsScreen={false}
-            />
-          </Card>
-
-          <Card label="Did you reach your target mood?" icon="🎯">
-            <ThreeTap value={targetMood} onChange={setTargetMood} />
-          </Card>
-
-          <Card label="Tell us more (optional)" icon="💬">
-            <TextInput
-              style={styles.textInput}
-              value={review}
-              onChangeText={setReview}
-              placeholder="What moved you? What could be better..."
-              placeholderTextColor="#3D2F5A"
-              multiline
-              numberOfLines={5}
-              textAlignVertical="top"
-              maxLength={500}
-            />
-            <Text style={styles.charCount}>{review.length} / 500</Text>
           </Card>
 
           {/* Submit */}
@@ -589,6 +720,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: -4,
+    flexWrap: "wrap",
   },
   dualSliderTitle: {
     color: "#E0D0FF",
@@ -600,6 +732,7 @@ const styles = StyleSheet.create({
     color: "#4A3860",
     fontSize: 11,
     fontStyle: "italic",
+    marginLeft: "auto",
   },
   dualDivider: {
     height: 1,

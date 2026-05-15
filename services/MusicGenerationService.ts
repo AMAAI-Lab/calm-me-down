@@ -6,9 +6,14 @@ import {
   LYRICS_PROVIDERS,
   LyricsProviderType,
   LyricsResult,
-  MOCK_LYRICS,
+  PRE_GENERATED_PLAYLIST,
   SUNO_ORG_PAYLOAD,
 } from "@/constants/appConstants";
+import {
+  getPgpIdsOfEmotion,
+  getVocalGender,
+  savePgpIds,
+} from "./LocalUserService";
 
 // --- API KEYS & CONSTANTS ---
 const OPEN_AI_API_KEY = process.env.EXPO_PUBLIC_OPEN_AI_API_KEY;
@@ -325,12 +330,13 @@ export async function generateSong(
 // 1_1. SUNO_ORG PROVIDER (MusicAPI.ai)
 // =================================================================
 
-function buildSunoOrgPayload(
+async function buildSunoOrgPayload(
   lyrics: string,
   genres: string,
   artists: string,
   musicStyle: string,
   tempoRange?: number[],
+  currentMood?: string,
 ) {
   const artistsArr = artists
     .split(",")
@@ -338,6 +344,9 @@ function buildSunoOrgPayload(
     .filter(Boolean);
 
   const styleHeader = [
+    !!currentMood
+      ? `Current emotional stage: ${currentMood}. This song should feel like part of a gradual emotional journey.`
+      : "",
     musicStyle?.length ? `${musicStyle}` : "",
     genres?.length ? `Style: ${genres}.` : "",
     artists?.length
@@ -350,10 +359,14 @@ function buildSunoOrgPayload(
     .filter(Boolean)
     .join("\n");
 
-  const prompt = styleHeader?.length ? `${styleHeader}\n${lyrics}` : lyrics;
+  const prompt = styleHeader?.length
+    ? `[${styleHeader}]\n\n[LYRICS]\n${lyrics}`
+    : lyrics;
+  const vocalGender = await getVocalGender();
+
   const payload = {
     ...SUNO_ORG_PAYLOAD,
-    vocalGender: Math.random() < 0.5 ? "m" : "f",
+    vocalGender,
     callBackUrl: "https://api.example.com/callback",
     title: "Your Personal Playlist",
     prompt,
@@ -386,12 +399,13 @@ async function generateWithSunoOrg(
     };
 
     if (genres && artists) {
-      payload = buildSunoOrgPayload(
+      payload = await buildSunoOrgPayload(
         lyrics,
         genres,
         artists,
         musicStyle,
         tempoRange,
+        mood,
       );
     }
 
@@ -426,6 +440,10 @@ async function generateWithSunoOrg(
 
     const taskId = data.data?.taskId || data.id;
     console.log(` SUNO_ORG: Task ID: ${taskId}`);
+    if (!taskId) {
+      console.error("Task ID not retrieved: ", data?.msg || data?.data?.msg);
+      return null;
+    }
 
     // return await pollSunoOrg(taskId, mood);
     return await pollSunoOrgStreamUrl(taskId, mood, payload);
@@ -457,6 +475,10 @@ async function pollSunoOrgStreamUrl(
   mood: string,
   payload: object,
 ): Promise<GeneratedSong | null> {
+  if (!taskId) {
+    throw new Error("Undefined Suno Task ID for polling!");
+  }
+
   const maxAttempts = 150;
   let attempts = 0;
 
@@ -537,6 +559,9 @@ async function pollSunoOrgStreamUrl(
   throw new Error("SunoOrg stream timeout.");
 }
 async function continueSunoOrgPolling(taskId: string, mood: string) {
+  if (!taskId) {
+    console.error("Undefined Suno Task ID for Background polling!");
+  }
   console.log("Background Suno Org polling for final MP3...");
 
   const maxAttempts = 150;
@@ -826,59 +851,21 @@ async function generateWithMock(
 }
 
 export async function fetchSavedPlaylistTrack(
-  index: number,
-): Promise<GeneratedSong | null> {
+  emotion: "calm" | "joyful",
+): Promise<GeneratedSong> {
   await new Promise((r) => setTimeout(r, 12 * 1000));
 
-  const lyrics = MOCK_LYRICS;
-  const tracks: GeneratedSong[] = [
-    {
-      id: "1",
-      audioUrl:
-        "https://www.image2url.com/r2/default/audio/1776774880658-0fced3b3-4ea6-4258-8504-734b74992e22.mp3",
-      title: "Saved song",
-      duration: 30,
-      provider: "MOCK",
-      lyrics,
-      mood: "calm",
-    },
-    {
-      id: "2",
-      audioUrl:
-        "https://prod-1.storage.jamendo.com/?trackid=1210690&format=mp31&from=TRc2DtGKjCUn%2FyqvyMos5g%3D%3D%7CWTQt5%2FACfJ3G%2F35d1fYGFA%3D%3D",
-      title: "Saved song",
-      duration: 30,
-      provider: "MOCK",
-      lyrics,
-      mood: "comforting",
-    },
-    {
-      id: "3",
-      audioUrl:
-        "https://prod-1.storage.jamendo.com/?trackid=1160194&format=mp31&from=geCPusZxApKCczO010RaXQ%3D%3D%7CN07GqB%2BdGtlBE94yQWMXWQ%3D%3D",
-      title: "Saved song",
-      duration: 30,
-      provider: "MOCK",
-      lyrics,
-      mood: "hopeful",
-    },
-    {
-      id: "4",
-      audioUrl:
-        "https://prod-1.storage.jamendo.com/?trackid=951448&format=mp31&from=0jlXu5dhq1qDyJVR34SXkQ%3D%3D%7Ck3t4Goh0Q2o%2FuHluw1OsAA%3D%3D",
-      title: "Saved song",
-      duration: 30,
-      provider: "MOCK",
-      lyrics,
-      mood: "joyful",
-    },
-  ];
+  const playedIds = await getPgpIdsOfEmotion(emotion);
+  const commonIds = ["1", "2", "3", "4"];
+  const totalIds = emotion === "calm" ? [...commonIds] : [...commonIds, "5"];
+  const nonPlayedIds = totalIds.filter((id) => !playedIds.includes(id));
 
-  if (index < 0 || index > tracks.length) {
-    console.warn("Invalid index to fetch saved playlist track: ", index);
-    return null;
-  }
+  const randomId =
+    nonPlayedIds[Math.floor(Math.random() * nonPlayedIds.length)];
+  await savePgpIds(emotion, randomId);
 
+  const tracks = PRE_GENERATED_PLAYLIST[emotion] || [];
+  const index = Number(randomId) - 1 || 0;
   const song = tracks[index];
 
   setTimeout(() => {

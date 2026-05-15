@@ -62,6 +62,88 @@ export const buildEmotionPath = (
     .filter((v, i, arr) => arr.indexOf(v) === i);
 };
 
+export const buildUniqueEmotionPath = (
+  startEmotion: string,
+  endEmotion: string,
+  steps = PATH_DEFAULT_STEPS,
+): string[] => {
+  const start = getEmotionPoint(startEmotion);
+  const end = getEmotionPoint(endEmotion);
+  if (!start || !end) {
+    return [startEmotion, endEmotion];
+  }
+
+  // Oversample by a factor to increase chance of hitting `steps` unique emotions
+  const OVERSAMPLE = 10;
+  const totalSamples = steps * OVERSAMPLE;
+
+  const seen = new Set<string>();
+  const unique: string[] = [];
+
+  for (let i = 0; i <= totalSamples; i++) {
+    const t = i / totalSamples;
+    const valence = start.valence + t * (end.valence - start.valence);
+    const arousal = start.arousal + t * (end.arousal - start.arousal);
+    const emotion = findClosestEmotion(valence, arousal).emotion;
+
+    if (!seen.has(emotion)) {
+      seen.add(emotion);
+      unique.push(emotion);
+    }
+  }
+
+  // If oversampling gave us enough, pick `steps` evenly-spaced items
+  if (unique.length >= steps) {
+    const indices = Array.from({ length: steps }, (_, i) =>
+      Math.round((i / (steps - 1)) * (unique.length - 1)),
+    );
+    return indices.map((idx) => unique[idx]);
+  }
+
+  // Fallback: path is too short (start/end are very close) — pad with endpoint
+  // Find unused emotions closest to the VA midpoint of the path
+  const midValence = (start.valence + end.valence) / 2;
+  const midArousal = (start.arousal + end.arousal) / 2;
+
+  const fillers = EMOTION_MAP.filter((e) => !seen.has(e.emotion))
+    .sort((a, b) => {
+      const distA =
+        Math.abs(a.valence - midValence) + Math.abs(a.arousal - midArousal);
+      const distB =
+        Math.abs(b.valence - midValence) + Math.abs(b.arousal - midArousal);
+      return distA - distB;
+    })
+    .map((e) => e.emotion);
+
+  const needed = steps - unique.length;
+  const padded = [...unique, ...fillers.slice(0, needed)];
+
+  // Re-sort padded emotions by their VA proximity to the path
+  // so fillers slot in naturally rather than all bunching at the end
+  padded.sort((a, b) => {
+    const pa = getEmotionPoint(a)!;
+    const pb = getEmotionPoint(b)!;
+    // Project each point onto the start→end vector (0..1)
+    const dx = end.valence - start.valence;
+    const dy = end.arousal - start.arousal;
+    const lenSq = dx * dx + dy * dy || 1;
+    const tA =
+      ((pa.valence - start.valence) * dx + (pa.arousal - start.arousal) * dy) /
+      lenSq;
+    const tB =
+      ((pb.valence - start.valence) * dx + (pb.arousal - start.arousal) * dy) /
+      lenSq;
+    return tA - tB;
+  });
+
+  // Enforce start/end regardless of sort outcome
+  const result = padded.slice(0, steps);
+  result[0] = startEmotion;
+  result[result.length - 1] = endEmotion;
+
+  return result;
+};
+
 /**
  * Build a VA (valence-arousal) trajectory as numeric coordinates.
  * Returns the raw VA points for each step, useful for biometric fusion.

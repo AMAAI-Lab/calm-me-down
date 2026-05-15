@@ -63,11 +63,45 @@ export const createMusicSession = async (
   }
 };
 
-export const updateMusicSession = async (
+// export const updateMusicSession = async (
+//   userId: string | null,
+//   sessionId: string | null,
+//   updates: any,
+//   isParticipant: boolean = false,
+// ) => {
+//   try {
+//     if (!userId || !sessionId) {
+//       const missingFields = [
+//         !userId && "User-ID",
+//         !sessionId && "Session-ID",
+//       ].filter(Boolean);
+//       console.log(
+//         `Missing ${missingFields.join(", ")} while updating music session!`,
+//       );
+//       return;
+//     }
+
+//     const rootCollection = !isParticipant
+//       ? "musicSessions"
+//       : "testMusicSessions";
+//     const sessionRef = doc(db, rootCollection, userId, "sessions", sessionId);
+
+//     const updatedDocument = {
+//       ...updates,
+//       updatedAt: serverTimestamp(),
+//     };
+
+//     await updateDoc(sessionRef, { ...updatedDocument });
+//     console.log("Successfully updated music session in DB");
+//   } catch (err) {
+//     console.error("Update music session in DB failed:", err);
+//   }
+// };
+
+export const createMusicTrajectory = async (
   userId: string | null,
   sessionId: string | null,
-  updates: any,
-  isParticipant: boolean = false,
+  info: object,
 ) => {
   try {
     if (!userId || !sessionId) {
@@ -76,25 +110,70 @@ export const updateMusicSession = async (
         !sessionId && "Session-ID",
       ].filter(Boolean);
       console.log(
-        `Missing ${missingFields.join(", ")} while updating music session!`,
+        `Missing ${missingFields.join(", ")} while creating music trajectory!`,
+      );
+      return null;
+    }
+
+    const trajectoryRef = collection(
+      db,
+      "testMusicSessions",
+      userId,
+      "sessions",
+      sessionId,
+      "trajectories",
+    );
+    const docRef = await addDoc(trajectoryRef, {
+      ...info,
+      createdAt: serverTimestamp(),
+    });
+
+    console.log("Successfully created trajectory in DB");
+    return docRef.id;
+  } catch (err) {
+    console.error("Failed to create music trajectory:", err);
+    return null;
+  }
+};
+
+export const updateMusicTrajectory = async (
+  userId: string | null,
+  sessionId: string | null,
+  trajectoryId: string | null,
+  updates: any,
+) => {
+  try {
+    if (!userId || !sessionId || !trajectoryId) {
+      const missingFields = [
+        !userId && "User-ID",
+        !sessionId && "Session-ID",
+        !trajectoryId && "Trajectory-ID",
+      ].filter(Boolean);
+      console.log(
+        `Missing ${missingFields.join(", ")} while updating music trajectory!`,
       );
       return;
     }
 
-    const rootCollection = !isParticipant
-      ? "musicSessions"
-      : "testMusicSessions";
-    const sessionRef = doc(db, rootCollection, userId, "sessions", sessionId);
+    const trajectoryRef = doc(
+      db,
+      "testMusicSessions",
+      userId,
+      "sessions",
+      sessionId,
+      "trajectories",
+      trajectoryId,
+    );
 
     const updatedDocument = {
       ...updates,
       updatedAt: serverTimestamp(),
     };
 
-    await updateDoc(sessionRef, { ...updatedDocument });
-    console.log("Successfully updated music session in DB");
+    await updateDoc(trajectoryRef, { ...updatedDocument });
+    console.log("Successfully updated music trajectory in DB");
   } catch (err) {
-    console.error("Update music session in DB failed:", err);
+    console.error("Update music trajectory in DB failed:", err);
   }
 };
 
@@ -104,6 +183,7 @@ export const addTrackToSession = async (
   songIdx: number,
   track: object,
   isParticipant: boolean = false,
+  trajectoryId: string | null = null,
 ) => {
   // track: {
   //   mood: '',
@@ -121,31 +201,50 @@ export const addTrackToSession = async (
         !sessionId && "Session-ID",
       ].filter(Boolean);
       console.log(
-        `Missing ${missingFields.join(", ")} while adding track in session!`,
+        `Missing ${missingFields.join(", ")} while adding track in ${isParticipant ? "trajectory" : "session"}!`,
       );
       return null;
     }
+    if (isParticipant && !trajectoryId) {
+      console.log(`Missing Trajectory-Id while adding track in trajectory!`);
+      return null;
+    }
 
-    const rootCollection = !isParticipant
-      ? "musicSessions"
-      : "testMusicSessions";
-    const tracksRef = collection(
+    let tracksRef = collection(
       db,
-      rootCollection,
+      "musicSessions",
       userId,
       "sessions",
       sessionId,
       "tracks",
     );
+    if (isParticipant && trajectoryId) {
+      tracksRef = collection(
+        db,
+        "testMusicSessions",
+        userId,
+        "sessions",
+        sessionId,
+        "trajectories",
+        trajectoryId,
+        "tracks",
+      );
+    }
+
     const docRef = await addDoc(tracksRef, {
       ...track,
       createdAt: serverTimestamp(),
     });
 
-    console.log("Successfully added track in a session in DB");
+    console.log(
+      `Successfully added track in a ${isParticipant ? "trajectory" : "session"} in DB`,
+    );
     return { id: docRef.id, songIdx };
   } catch (err) {
-    console.error("Add session track failed:", err);
+    console.error(
+      `Add ${isParticipant ? "trajectory" : "session"} track failed:`,
+      err,
+    );
     return null;
   }
 };
@@ -156,6 +255,7 @@ export const updateTrackFields = async (
   trackId: string | null,
   updates: any,
   isParticipant: boolean = false,
+  trajectoryId: string | null = null,
 ) => {
   // updates: {
   //   finalAudioUrl: "",
@@ -175,19 +275,33 @@ export const updateTrackFields = async (
       );
       return;
     }
+    if (isParticipant && !trajectoryId) {
+      console.log(`Missing Trajectory-Id while updating track fields!`);
+      return;
+    }
 
-    const rootCollection = !isParticipant
-      ? "musicSessions"
-      : "testMusicSessions";
-    const trackRef = doc(
+    let trackRef = doc(
       db,
-      rootCollection,
+      "musicSessions",
       userId,
       "sessions",
       sessionId,
       "tracks",
       trackId,
     );
+    if (isParticipant && trajectoryId) {
+      trackRef = doc(
+        db,
+        "testMusicSessions",
+        userId,
+        "sessions",
+        sessionId,
+        "trajectories",
+        trajectoryId,
+        "tracks",
+        trackId,
+      );
+    }
 
     const updatedDocument = {
       ...updates,
@@ -204,17 +318,17 @@ export const updateTrackFields = async (
   }
 };
 
-export const storeFeedback = async (userId: string | null, info: object) => {
-  try {
-    if (!userId) {
-      console.log(`Missing User ID while updating track fields!`);
-      return;
-    }
+// export const storeFeedback = async (userId: string | null, info: object) => {
+//   try {
+//     if (!userId) {
+//       console.log(`Missing User ID while updating track fields!`);
+//       return;
+//     }
 
-    const feedbackRef = collection(db, "userFeedback", userId, "feedbacks");
-    await addDoc(feedbackRef, { ...info, createdAt: serverTimestamp() });
-    console.log("Successfully added Feedback!");
-  } catch (err) {
-    console.error("Add feedback error:", err);
-  }
-};
+//     const feedbackRef = collection(db, "userFeedback", userId, "feedbacks");
+//     await addDoc(feedbackRef, { ...info, createdAt: serverTimestamp() });
+//     console.log("Successfully added Feedback!");
+//   } catch (err) {
+//     console.error("Add feedback error:", err);
+//   }
+// };

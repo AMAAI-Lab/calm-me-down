@@ -5,11 +5,21 @@ import { useAuth } from "../context/AuthContext";
 import { ActivityIndicator, View } from "react-native";
 import ParticipantsScreen from "@/screens/ParticipantsScreen";
 import FeedbackScreen from "@/screens/FeedbackScreen";
+import { useEffect } from "react";
+import {
+  clearFeedbackSubmitted,
+  clearPlaylistFeedback,
+} from "@/services/LocalUserService";
 
 const Stack = createNativeStackNavigator();
 
 export default function RootNavigator() {
   const { user, loading, isParticipant } = useAuth();
+
+  useEffect(() => {
+    clearPlaylistFeedback();
+    clearFeedbackSubmitted();
+  }, []);
 
   if (loading) {
     return (
@@ -23,7 +33,6 @@ export default function RootNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {user ? (
         isParticipant ? (
-          // <Stack.Screen name="Participants" component={ParticipantsScreen} />
           <>
             <Stack.Screen name="Participants" component={ParticipantsScreen} />
             <Stack.Screen name="Feedback" component={FeedbackScreen} />
