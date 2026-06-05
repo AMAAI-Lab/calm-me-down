@@ -22,8 +22,9 @@ export type HeartRateSample = {
 };
 
 export type UserProfile = {
-  name: string;
+  name?: string;
   nickName?: string;
+  profession?: string;
   age: string;
   email: string;
   favoriteGenre: string;
@@ -40,56 +41,71 @@ export const LISTEN_BEFORE_GENERATE_MS = 2000;
 export const CONTINUOUS_PLAYBACK_MS = 5000;
 
 export const EMOTION_MAP: EmotionPoint[] = [
-  // Q1 – High Valence, High Arousal
-  { emotion: "Thrilling", valence: 9.52, arousal: 9.14 },
-  { emotion: "Excited", valence: 9.17, arousal: 9.38 },
-  { emotion: "Energetic", valence: 8.62, arousal: 8.81 },
-  { emotion: "Joyful", valence: 9.96, arousal: 6.58 },
-  { emotion: "Uplifting", valence: 7.94, arousal: 5.93 },
-  { emotion: "Cheerful", valence: 9.96, arousal: 6.53 },
-  { emotion: "Hopeful", valence: 9.52, arousal: 4.21 },
+  // ── Q1: High Valence, High Arousal ─────────────────────────────────────────
+  { emotion: "Excited", valence: 9.17, arousal: 9.38 }, // NRC
+  { emotion: "Thrilling", valence: 9.52, arousal: 9.14 }, // NRC
+  { emotion: "Elated", valence: 8.19, arousal: 8.2 }, // NRC+ANEW
+  { emotion: "Energetic", valence: 8.62, arousal: 8.81 }, // NRC
+  { emotion: "Playful", valence: 9.03, arousal: 7.19 }, // NRC
+  { emotion: "Lively", valence: 8.3, arousal: 7.19 }, // NRC+ANEW
+  { emotion: "Joyful", valence: 9.54, arousal: 6.59 }, // NRC+ANEW
+  { emotion: "Cheerful", valence: 9.96, arousal: 6.53 }, // NRC
+  { emotion: "Upbeat", valence: 8.9, arousal: 5.78 }, // NRC
+  { emotion: "Uplifting", valence: 7.94, arousal: 5.93 }, // NRC
+  { emotion: "Hopeful", valence: 8.69, arousal: 5.3 }, // NRC+ANEW
 
-  // Q2 – Low Valence, High Arousal
-  { emotion: "Fearful", valence: 1.75, arousal: 5.34 },
-  { emotion: "Angry", valence: 2.1, arousal: 8.47 },
-  { emotion: "Anxious", valence: 3.53, arousal: 8.88 },
-  { emotion: "Tense", valence: 4.56, arousal: 4.95 },
-  { emotion: "Intense", valence: 6.33, arousal: 7.97 },
-  { emotion: "Mysterious", valence: 5.03, arousal: 7.29 },
-  { emotion: "Disgusted", valence: 1.47, arousal: 6.53 },
-  { emotion: "Frustrated", valence: 2.09, arousal: 7.84 },
-  { emotion: "Ashamed", valence: 2.06, arousal: 5.03 },
-  { emotion: "Bitter", valence: 1.75, arousal: 5.31 },
-  { emotion: "Helpless", valence: 1.84, arousal: 5.07 },
+  // ── Q2: Low Valence, High Arousal ──────────────────────────────────────────
+  { emotion: "Panicked", valence: 1.9, arousal: 9.54 }, // NRC
+  { emotion: "Enraged", valence: 2.19, arousal: 9.34 }, // NRC+ANEW
+  { emotion: "Agitated", valence: 5.0, arousal: 8.94 }, // NRC
+  { emotion: "Alarmed", valence: 2.69, arousal: 8.4 }, // NRC
+  { emotion: "Angry", valence: 2.59, arousal: 8.21 }, // NRC+ANEW
+  { emotion: "Anxious", valence: 4.41, arousal: 8.27 }, // NRC+ANEW
+  { emotion: "Nervous", valence: 3.23, arousal: 7.83 }, // NRC+ANEW
+  { emotion: "Distressed", valence: 2.17, arousal: 7.51 }, // NRC+ANEW
+  { emotion: "Stressed", valence: 2.50, arousal: 7.66 }, // NRC+ANEW
+  { emotion: "Frustrated", valence: 2.19, arousal: 6.52 }, // NRC+ANEW
+  { emotion: "Ashamed", valence: 2.4, arousal: 6.29 }, // NRC
+  { emotion: "Fearful", valence: 2.08, arousal: 6.17 }, // NRC+ANEW
+  { emotion: "Tense", valence: 4.22, arousal: 6.09 }, // NRC+ANEW
 
-  // Q3 – Low Valence, Low Arousal
-  { emotion: "Depressed", valence: 1.22, arousal: 5.0 },
-  { emotion: "Gloomy", valence: 1.96, arousal: 4.69 },
-  { emotion: "Lonely", valence: 3.25, arousal: 3.03 },
-  { emotion: "Sad", valence: 3.02, arousal: 4.0 },
-  { emotion: "Melancholic", valence: 2.63, arousal: 3.75 },
-  { emotion: "Sorrowful", valence: 1.44, arousal: 4.8 },
-  { emotion: "Tired", valence: 3.38, arousal: 3.02 },
-  { emotion: "Bored", valence: 3.34, arousal: 2.8 },
+  // ── Q3: Low Valence, Low Arousal ───────────────────────────────────────────
+  { emotion: "Sorrowful", valence: 1.44, arousal: 4.8 }, // NRC
+  { emotion: "Depressed", valence: 1.57, arousal: 5.1 }, // NRC+ANEW
+  { emotion: "Hopeless", valence: 1.85, arousal: 3.68 }, // NRC
+  { emotion: "Gloomy", valence: 1.96, arousal: 4.69 }, // NRC
+  { emotion: "Sad", valence: 2.36, arousal: 4.26 }, // NRC+ANEW
+  { emotion: "Apathetic", valence: 2.69, arousal: 3.63 }, // NRC
+  { emotion: "Melancholic", valence: 2.63, arousal: 3.75 }, // NRC
+  { emotion: "Lonely", valence: 2.78, arousal: 3.99 }, // NRC+ANEW
+  { emotion: "Bored", valence: 2.79, arousal: 2.78 }, // NRC+ANEW
+  { emotion: "Weary", valence: 3.44, arousal: 3.85 }, // NRC+ANEW
+  { emotion: "Sluggish", valence: 3.02, arousal: 2.12 }, // NRC
 
-  // Q4 – High Valence, Low Arousal
-  { emotion: "Peaceful", valence: 8.8, arousal: 1.49 },
-  { emotion: "Relaxed", valence: 8.79, arousal: 1.4 },
-  { emotion: "Comforting", valence: 9.15, arousal: 4.03 },
-  { emotion: "Calm", valence: 8.88, arousal: 1.45 },
-  { emotion: "Gentle", valence: 8.62, arousal: 4.18 },
-  { emotion: "Nostalgic", valence: 5.12, arousal: 4.16 },
-  { emotion: "Dreamy", valence: 8.53, arousal: 4.15 },
+  // ── Q4: High Valence, Low Arousal ──────────────────────────────────────────
+  { emotion: "Tranquil", valence: 9.63, arousal: 1.28 }, // NRC
+  { emotion: "Calm", valence: 8.88, arousal: 1.45 }, // NRC
+  { emotion: "Peaceful", valence: 8.8, arousal: 1.49 }, // NRC
+  { emotion: "Relaxed", valence: 8.27, arousal: 1.98 }, // NRC+ANEW
+  { emotion: "Serene", valence: 8.22, arousal: 2.19 }, // NRC
+  { emotion: "Restful", valence: 8.03, arousal: 2.04 }, // NRC
+  { emotion: "Content", valence: 7.88, arousal: 3.66 }, // NRC
+  { emotion: "Cozy", valence: 8.69, arousal: 3.91 }, // NRC+ANEW
+  { emotion: "Comforting", valence: 9.15, arousal: 4.03 }, // NRC
+  { emotion: "Dreamy", valence: 8.53, arousal: 4.15 }, // NRC
+  { emotion: "Grateful", valence: 8.89, arousal: 4.6 }, // NRC+ANEW
+  { emotion: "Nostalgic", valence: 5.12, arousal: 4.16 }, // NRC
 
-  // Additional
-  { emotion: "Passionate", valence: 9.96, arousal: 7.52 },
-  { emotion: "Humorous", valence: 9.15, arousal: 6.54 },
-  { emotion: "Solemn", valence: 7.37, arousal: 4.33 },
-  { emotion: "Warm", valence: 7.84, arousal: 3.81 },
-  { emotion: "Cold", valence: 4.19, arousal: 5.84 },
-  { emotion: "Profound", valence: 7.79, arousal: 5.91 },
-  { emotion: "Upbeat", valence: 8.9, arousal: 5.78 },
-  { emotion: "Contemplative", valence: 7.56, arousal: 3.77 },
+  // ── Cross-quadrant: Trajectory waypoints & mid-space ──────────────────────
+  { emotion: "Warm", valence: 7.84, arousal: 3.81 }, // NRC
+  { emotion: "Contemplative", valence: 7.56, arousal: 3.77 }, // NRC
+  { emotion: "Profound", valence: 7.8, arousal: 5.91 }, // NRC
+  { emotion: "Solemn", valence: 6.05, arousal: 4.11 }, // NRC+ANEW
+  { emotion: "Pensive", valence: 5.86, arousal: 2.98 }, // NRC
+  { emotion: "Indifferent", valence: 4.81, arousal: 2.93 }, // NRC+ANEW
+  { emotion: "Wistful", valence: 3.91, arousal: 5.06 }, // NRC
+  { emotion: "Detached", valence: 3.87, arousal: 4.62 }, // NRC+ANEW
+  { emotion: "Uneasy", valence: 2.04, arousal: 6.38 }, // NRC
 ];
 
 export const EMOTION_OPTIONS = EMOTION_MAP.map((e) => e.emotion).sort();
@@ -485,10 +501,10 @@ export const MOCK_LYRICS = `
   Line 12 of the mock lyrics
 `;
 export const EMOTION_GRID: string[][] = [
-  ["Fearful", "Angry", "Anxious", "Frustrated"],
-  ["Excited", "Energetic", "Hopeful", "Cheerful"],
-  ["Sad", "Lonely", "Helpless", "Bored"],
-  ["Gentle", "Relaxed", "Comforting", "Peaceful"],
+  ["Stressed", "Angry", "Anxious", "Frustrated"],
+  ["Excited", "Energetic", "Hopeful", "Joyful"],
+  ["Sad", "Lonely", "Weary", "Bored"],
+  ["Calm", "Relaxed", "Content", "Peaceful"],
 ];
 
 export const PRE_GENERATED_PLAYLIST = {

@@ -9,6 +9,7 @@ const PLAYLIST_FEEDBACK_KEY = "@playlist_feedback";
 const TRAJECTORY_ID_KEY = "@trajectory_id";
 const PRE_GEN_PLAYLIST_KEY = "@pre_gen_playlist";
 const VOCAL_GENDER_COUNTS_KEY = "@vocal_gender_counts";
+const APPLE_HEALTH_AUTH_KEY = "@apple_health_authorized";
 
 export interface FeedbackSubmittedStatus {
   pre: boolean;
@@ -149,7 +150,7 @@ export const clearPgpIds = async () => {
   await AsyncStorage.removeItem(PRE_GEN_PLAYLIST_KEY);
 };
 
-// Methods for mutating vocal gender counts
+// Methods for vocal gender counts
 export const getVocalGender = async (): Promise<string> => {
   const raw = await AsyncStorage.getItem(VOCAL_GENDER_COUNTS_KEY);
   const counts = raw ? JSON.parse(raw) : {};
@@ -180,4 +181,13 @@ export const getVocalGender = async (): Promise<string> => {
 };
 export const clearVocalGenderCounts = async () => {
   await AsyncStorage.removeItem(VOCAL_GENDER_COUNTS_KEY);
+};
+
+// Methods for apple health auth status
+export const saveAppleHealthAuthStatus = async (val: boolean) => {
+  await AsyncStorage.setItem(APPLE_HEALTH_AUTH_KEY, String(val));
+};
+export const getAppleHealthAuthStatus = async (): Promise<boolean> => {
+  const val = await AsyncStorage.getItem(APPLE_HEALTH_AUTH_KEY);
+  return val === "true";
 };

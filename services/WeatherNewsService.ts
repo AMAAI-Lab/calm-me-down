@@ -85,6 +85,68 @@ export async function fetchNewsData(
   }
 }
 
+function isPromoArticle(article: {
+  title: string;
+  description?: string;
+  url: string;
+}): boolean {
+  const BLOCKED_DOMAINS = [
+    "prnewswire.com",
+    "businesswire.com",
+    "globenewswire.com",
+    "marketwatch.com",
+    "accesswire.com",
+    "einpresswire.com",
+    "benzinga.com",
+    "fool.com",
+  ];
+  const PROMO_PATTERNS = [
+    /\b\d+%\s*off\b/i,
+    /\b(buy|shop|order|get)\s+now\b/i,
+    /\b(deal|discount|sale|promo|coupon|offer)\b/i,
+    /\bsponsored\b/i,
+    /\b(best\s+)?(budget|cheap|affordable)\s+(picks?|buys?|options?)\b/i,
+    /\baffiliate\b/i,
+    /\breview(ed)?:\s/i, // "Reviewed: Product X" style titles
+    /\btop\s+\d+\s+(best\s+)?\w+\s+to\s+buy\b/i,
+
+    // Horoscope / astrology content
+    /\b(horoscope|astrology|zodiac|mercury retrograde|cosmic|moon\s+in|rising\s+sign|birth\s+chart)\b/i,
+    // "Title | Month Year" — editorial calendar / newsletter pattern
+    /\|\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{4}/i,
+    // Monthly/weekly roundups from content farms
+    /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4}\b/i,
+  ];
+
+  const titleAndDesc = `${article.title} ${article.description ?? ""}`;
+  if (PROMO_PATTERNS.some((pattern) => pattern.test(titleAndDesc))) return true;
+
+  try {
+    const domain = new URL(article.url).hostname.replace("www.", "");
+    if (BLOCKED_DOMAINS.includes(domain)) return true;
+  } catch {
+    // malformed URL — treat as suspicious
+    return true;
+  }
+
+  return false;
+}
+
+// Rough heuristic: if >25% of alpha chars are accented/non-ASCII, likely not English
+function isLikelyNonEnglish(text: string): boolean {
+  // Detects non-Latin scripts: Arabic, Chinese, Japanese, Korean, Cyrillic, Hebrew, Thai, etc.
+  const NON_LATIN_SCRIPT =
+    /[\u0600-\u06FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u0400-\u04FF\u0590-\u05FF\u0E00-\u0E7F]/;
+
+  if (NON_LATIN_SCRIPT.test(text)) return true;
+
+  const alpha = text.replace(/[^a-zA-Z\u00C0-\u024F]/g, "");
+  if (alpha.length === 0) return false;
+
+  const nonAsciiAlpha = (text.match(/[\u00C0-\u024F]/g) ?? []).length;
+  return nonAsciiAlpha / alpha.length > 0.25;
+}
+
 export async function fetchUniqueNewsData(
   countryCode: string = "us",
 ): Promise<NewsData | null> {
@@ -117,29 +179,45 @@ export async function fetchUniqueNewsData(
       );
     }
 
-    if (data.articles.length > 0) {
-      // Filter out articles with null/removed titles
-      const validArticles = data.articles.filter(
-        (a: any) => a.title && a.title !== "[Removed]",
-      );
-
-      if (validArticles.length === 0) {
-        return await fetchNewsData(countryCode);
-      }
-
-      const randomIndex = Math.floor(Math.random() * validArticles.length);
-      const article = validArticles[randomIndex];
-
-      return {
-        headline: article.title,
-        source: article.source.name,
-      };
-    } else {
+    if (data.articles.length === 0) {
       console.warn("Couldn't find any valid news articles!");
       return null;
     }
+
+    const validArticles = data.articles.filter((a: any) => {
+      if (!a.title || a.title === "[Removed]") return false;
+      if (a.title.length < 40 || !a.description || a.description.length < 20)
+        return false; // thin content
+      if (isLikelyNonEnglish(a.title)) return false;
+      if (
+        isPromoArticle({
+          title: a.title,
+          description: a.description,
+          url: a.url,
+        })
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+
+    if (validArticles.length === 0) {
+      return await fetchNewsData(countryCode);
+    }
+
+    const randomIndex = Math.floor(Math.random() * validArticles.length);
+    const article = validArticles[randomIndex];
+
+    return {
+      headline: article.title,
+      source: article.source.name,
+    };
   } catch (error: any) {
-    console.error("Network error fetching news:", error?.message);
+    console.error(
+      "Error fetching different topics news:",
+      error?.message || error,
+    );
     return null;
   }
 }

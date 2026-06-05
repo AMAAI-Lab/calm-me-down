@@ -6,7 +6,13 @@ import {
 } from "@/services/HealthService";
 import { useHealthConnect } from "@/hooks/useHealthConnect";
 import { FontAwesome5 } from "@expo/vector-icons";
-import { Dispatch, SetStateAction, useCallback, useState } from "react";
+import {
+  Dispatch,
+  SetStateAction,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 import {
   Alert,
   Button,
@@ -18,6 +24,10 @@ import {
   View,
 } from "react-native";
 import { HealthConnectInstallModal } from "./health-connect-install-modal";
+import {
+  getAppleHealthAuthStatus,
+  saveAppleHealthAuthStatus,
+} from "@/services/LocalUserService";
 
 export default function HealthProviderSection({
   provider,
@@ -41,6 +51,11 @@ export default function HealthProviderSection({
   } = useHealthConnect(updateHealthData);
 
   const [hcInstallModalVisible, setHcInstallModalVisible] = useState(false);
+
+  const fetchAndUpdateAppleHealthData = async () => {
+    const data = await fetchAppleHealthData();
+    updateHealthData(data);
+  };
 
   const handleAuthorizeAndFetch = useCallback(async () => {
     // ── Health Connect ───────────────────────────────────────
@@ -73,10 +88,10 @@ export default function HealthProviderSection({
         if (!isAppleAuthorized) {
           authorized = await authorizeAppleHealth();
           setIsAppleAuthorized(authorized);
+          await saveAppleHealthAuthStatus(authorized);
         }
         if (authorized) {
-          const data = await fetchAppleHealthData();
-          updateHealthData(data);
+          await fetchAndUpdateAppleHealthData();
         } else {
           Alert.alert(
             "Authorization Failed",
@@ -124,6 +139,14 @@ export default function HealthProviderSection({
     p === "Apple Health" ? "apple" : "heartbeat";
 
   const isDisabled = loading || hcLoading;
+  
+  useEffect(() => {
+    (async () => {
+      const status = await getAppleHealthAuthStatus();
+      setIsAppleAuthorized(status);
+      if (status) await fetchAndUpdateAppleHealthData();
+    })();
+  }, []);
 
   return (
     <>

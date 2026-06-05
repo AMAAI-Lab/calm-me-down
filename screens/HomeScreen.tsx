@@ -270,7 +270,7 @@ export default function HomeScreen() {
         You are a creative songwriter. Generate original song lyrics personalized to the following inputs:
 
         USER
-        - Name: ${user.name}
+        ${user?.nickName && `- Name: ${user.nickName}`}
         - Age: ${user.age}
 
         MUSIC STYLE
@@ -319,10 +319,6 @@ export default function HomeScreen() {
 
       // Mock Latency
       setTimeout(async () => {
-        // 1. Mock Lyrics
-        const mockLyrics = `(Mock Lyrics for ${user.name})\n\nIn the city of ${weatherData?.city || "Dreams"},\nHeart beating at ${healthData.heartRate || "steady"} pace,\nWalking through the ${weatherData?.description || "mist"},\nFinding my own space.\n\nFrom ${input.currentMood} shadows,\nTo ${input.desiredMood} light,\nThis song guides me,\nThrough the day and night.`;
-        setGeneratingLyrics(false);
-
         // 2. Mock Song (Immediately after)
         setGeneratingSong(true);
         setTimeout(() => {
@@ -330,7 +326,7 @@ export default function HomeScreen() {
             audioUrl:
               // "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", // Public domain MP3
               "https://wephotos1.s3.amazonaws.com/bCv0l1ycm2Ac.mp3",
-            title: `Song for ${user.name}`,
+            title: `Song for ${user?.nickName || "User"}`,
             duration: 30,
             provider: "MOCK",
           };
@@ -555,7 +551,7 @@ export default function HomeScreen() {
         You are a creative songwriter. Generate original song lyrics personalized to the following inputs:
 
         USER
-        - Name: ${user.name}
+        - Name: ${user.nickName}
         - Age: ${user.age}
 
         MUSIC STYLE
@@ -602,7 +598,7 @@ export default function HomeScreen() {
         const nextSongIdx = ((currentSongIndex + 1) % 15) + 1;
         const mockSongData: GeneratedSong = {
           audioUrl: `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-${nextSongIdx}.mp3`, // Public domain MP3
-          title: `Song for ${user.name || "N/A"}`,
+          title: `Song for ${user.nickName || "the User"}`,
           duration: 30,
           provider: "MOCK",
         };
@@ -898,7 +894,11 @@ export default function HomeScreen() {
         <Text style={styles.header}>Emotion to Lyric Generator</Text>
 
         <EmotionDropdown
-          label={`Hi ${user?.name}, how are you feeling today?`}
+          label={
+            user?.nickName
+              ? `Hi ${user.nickName}, how are you feeling today?`
+              : "How are you feeling today?"
+          }
           placeholder="Sad, Calm, Mysterious, Tense..."
           value={input.currentMood}
           moods={EMOTION_OPTIONS}
@@ -1154,7 +1154,7 @@ function buildLyricPrompt({
 }: {
   input: {
     activity: string;
-    name: string;
+    nickName?: string;
     age: string;
     favoriteGenre: string;
     favoriteBand: string;
@@ -1185,7 +1185,7 @@ function buildLyricPrompt({
     You are a creative songwriter. Generate original song lyrics personalized to the following inputs:
 
     USER
-    - Name: ${input.name}
+    ${input?.nickName && `- Name: ${input.nickName}`}
     - Age: ${input.age}
 
     MUSIC STYLE

@@ -1,7 +1,6 @@
 import { useAuth } from "@/context/AuthContext";
 import { updateMusicTrajectory } from "@/services/DbService";
 import {
-  getPlaylistFeedback,
   getSessionId,
   getTrajectoryId,
   saveFeedbackSubmitted,
@@ -9,7 +8,7 @@ import {
 } from "@/services/LocalUserService";
 import { useRoute } from "@react-navigation/native";
 import { useNavigation } from "expo-router";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
@@ -21,15 +20,127 @@ import {
   KeyboardAvoidingView,
   StatusBar,
   Dimensions,
-  PanResponder,
 } from "react-native";
+import Slider from "@react-native-community/slider";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
-const TRACK_WIDTH = SCREEN_WIDTH - 80;
-const THUMB_SIZE = 28;
-const STEPS = 7;
 
+// VA Slider
+function VASlider({
+  value,
+  onChange,
+  lowLabel = "Low",
+  highLabel = "High",
+}: {
+  value: number; // 0 = unset, 1–100 = selected
+  onChange: (v: number) => void;
+  lowLabel?: string;
+  highLabel?: string;
+}) {
+  const TRACK_W = SCREEN_WIDTH - 80;
+
+  const BUBBLE_W = 44;
+  const bubbleLeft = value > 0 ? ((value - 1) / 99) * (TRACK_W - BUBBLE_W) : 0;
+
+  const isSet = value > 0;
+
+  return (
+    <View style={vaStyles.wrapper}>
+      <View style={vaStyles.bubbleTrack}>
+        <View
+          style={[
+            vaStyles.bubble,
+            {
+              left: bubbleLeft,
+              backgroundColor: isSet ? "#C4417A" : "#1E1535",
+              borderColor: isSet ? "#C4417A" : "#2A1F40",
+              opacity: isSet ? 1 : 0.4,
+            },
+          ]}
+        >
+          <Text
+            style={[vaStyles.bubbleText, { color: isSet ? "#fff" : "#6A5580" }]}
+          >
+            {isSet ? value : "–"}
+          </Text>
+        </View>
+      </View>
+
+      {/* Slider */}
+      <Slider
+        style={vaStyles.slider}
+        minimumValue={1}
+        maximumValue={100}
+        step={1}
+        value={isSet ? value : 1}
+        onValueChange={(v) => onChange(Math.round(v))}
+        minimumTrackTintColor={isSet ? "#C4417A" : "#2A1F40"}
+        maximumTrackTintColor="#1E1535"
+        thumbTintColor={isSet ? "#C4417A" : "#2A1F40"}
+      />
+
+      {/* Axis labels */}
+      <View style={vaStyles.axisRow}>
+        <Text style={vaStyles.axisLabel}>{lowLabel}</Text>
+        <Text
+          style={[vaStyles.axisValue, { color: isSet ? "#C4417A" : "#3D2F5A" }]}
+        >
+          {isSet ? `${value} / 100` : "Move slider to rate"}
+        </Text>
+        <Text style={vaStyles.axisLabel}>{highLabel}</Text>
+      </View>
+    </View>
+  );
+}
+
+const vaStyles = StyleSheet.create({
+  wrapper: {
+    paddingTop: 4,
+  },
+  bubbleTrack: {
+    height: 32,
+    position: "relative",
+    marginHorizontal: 10,
+  },
+  bubble: {
+    position: "absolute",
+    width: 44,
+    height: 28,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  bubbleText: {
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
+  slider: {
+    width: "100%",
+    height: 30,
+    marginBottom: 10,
+  },
+  axisRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: -4,
+    paddingHorizontal: 4,
+  },
+  axisLabel: {
+    color: "#4A3860",
+    fontSize: 11,
+  },
+  axisValue: {
+    fontSize: 11,
+    fontStyle: "italic",
+    fontWeight: "600",
+  },
+});
+
+// Card
 function Card({
   label,
   icon,
@@ -50,279 +161,22 @@ function Card({
   );
 }
 
-function ScaleRating({
-  value,
-  onChange,
-  lowLabel,
-  highLabel,
-  hints = [
-    "1 — Not at all",
-    "2 — Slightly",
-    "3 — Somewhat",
-    "4 — Quite",
-    "5 — Very much",
-  ],
-  isParticipantsScreen = true,
-  valueRestored = false,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  lowLabel?: string;
-  highLabel?: string;
-  hints?: string[];
-  isParticipantsScreen?: boolean;
-  valueRestored?: boolean;
-}) {
-  const positionForValue = (v: number) =>
-    v > 0 ? ((v - 1) / (STEPS - 1)) * (TRACK_WIDTH - THUMB_SIZE) : 0;
-
-  const pan = useRef(
-    new Animated.Value(value > 0 ? positionForValue(value) : 0),
-  ).current;
-  const isDragging = useRef(false);
-
-  const snapToStep = (x: number): number => {
-    const clamped = Math.max(0, Math.min(x, TRACK_WIDTH - THUMB_SIZE));
-    const ratio = clamped / (TRACK_WIDTH - THUMB_SIZE);
-    return Math.round(ratio * (STEPS - 1)) + 1;
-  };
-
-  const snapAnimTo = (v: number) => {
-    Animated.spring(pan, {
-      toValue: positionForValue(v),
-      useNativeDriver: false,
-      speed: 30,
-      bounciness: 6,
-    }).start();
-  };
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (_, gs) => {
-        isDragging.current = true;
-        // @ts-ignore
-        pan.setOffset(pan._value);
-        pan.setValue(0);
-      },
-      onPanResponderMove: (_, gs) => {
-        // @ts-ignore
-        const raw = pan._offset + gs.dx;
-        const clamped = Math.max(0, Math.min(raw, TRACK_WIDTH - THUMB_SIZE));
-        pan.setValue(clamped - (pan as any)._offset);
-        const stepped = snapToStep(clamped);
-        onChange(stepped);
-      },
-      onPanResponderRelease: (_, gs) => {
-        pan.flattenOffset();
-        // @ts-ignore
-        const stepped = snapToStep((pan as any)._value);
-        onChange(stepped);
-        snapAnimTo(stepped);
-        isDragging.current = false;
-      },
-    }),
-  ).current;
-
-  // Tap directly on the track to jump
-  const handleTrackTap = (e: any) => {
-    const tapX = e.nativeEvent.locationX - THUMB_SIZE / 2;
-    const stepped = snapToStep(tapX);
-    onChange(stepped);
-    snapAnimTo(stepped);
-  };
-
-  const STEP_LABELS = ["1", "2", "3", "4", "5", "6", "7"];
-
-  const fillWidth = pan.interpolate({
-    inputRange: [0, TRACK_WIDTH - THUMB_SIZE],
-    outputRange: [THUMB_SIZE / 2, TRACK_WIDTH - THUMB_SIZE / 2],
-    extrapolate: "clamp",
-  });
-
-  const sliderColor = isParticipantsScreen ? "#b36cff" : "#C4417A";
-
-  useEffect(() => {
-    if (!value) return;
-    snapAnimTo(value);
-  }, [valueRestored]);
-
-  return (
-    <View style={sliderStyles.wrapper}>
-      <View style={sliderStyles.trackContainer} onTouchEnd={handleTrackTap}>
-        <View style={sliderStyles.trackBg} />
-
-        {value > 0 && (
-          <Animated.View
-            style={[
-              sliderStyles.trackFill,
-              { width: fillWidth, backgroundColor: sliderColor },
-            ]}
-          />
-        )}
-
-        {/* Step dots */}
-        {STEP_LABELS.map((_, i) => {
-          const dotX =
-            (i / (STEPS - 1)) * (TRACK_WIDTH - THUMB_SIZE) + THUMB_SIZE / 2 - 4;
-          const isActive = value > 0 && i < value;
-          return (
-            <View
-              key={i}
-              style={[
-                sliderStyles.stepDot,
-                { left: dotX },
-                isActive && { backgroundColor: sliderColor },
-              ]}
-            />
-          );
-        })}
-
-        {/* Thumb */}
-        <Animated.View
-          style={[
-            sliderStyles.thumb,
-            {
-              left: pan,
-              opacity: value > 0 ? 1 : 0.35,
-              backgroundColor: sliderColor,
-              shadowColor: sliderColor,
-            },
-          ]}
-          {...panResponder.panHandlers}
-        >
-          <View style={sliderStyles.thumbInner} />
-        </Animated.View>
-      </View>
-
-      {/* Step number labels */}
-      <View style={sliderStyles.stepLabelsRow}>
-        {STEP_LABELS.map((lbl, i) => (
-          <Text
-            key={i}
-            style={[
-              sliderStyles.stepLabel,
-              value === i + 1 && { color: sliderColor },
-            ]}
-          >
-            {lbl}
-          </Text>
-        ))}
-      </View>
-
-      {/* Axis labels */}
-      {!!lowLabel && !!highLabel && (
-        <View style={sliderStyles.axisRow}>
-          <Text style={sliderStyles.axisLabel}>{lowLabel}</Text>
-          <Text style={sliderStyles.axisLabel}>{highLabel}</Text>
-        </View>
-      )}
-
-      {/* Hint */}
-      {(value === 1 || value === STEPS) && (
-        <Text
-          style={[
-            sliderStyles.hint,
-            { color: sliderColor },
-            isParticipantsScreen && { marginLeft: 10 },
-          ]}
-        >
-          {hints[value - 1]}
-        </Text>
-      )}
-    </View>
-  );
-}
-const sliderStyles = StyleSheet.create({
-  wrapper: { gap: 8, paddingTop: 8 },
-  trackContainer: {
-    width: TRACK_WIDTH,
-    height: 40,
-    justifyContent: "center",
-  },
-  trackBg: {
-    position: "absolute",
-    left: THUMB_SIZE / 2,
-    right: THUMB_SIZE / 2,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#1E1535",
-  },
-  trackFill: {
-    position: "absolute",
-    left: THUMB_SIZE / 2,
-    height: 4,
-    borderRadius: 2,
-  },
-  stepDot: {
-    position: "absolute",
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#2A1F40",
-    top: 16,
-  },
-  thumb: {
-    position: "absolute",
-    width: THUMB_SIZE,
-    height: THUMB_SIZE,
-    borderRadius: THUMB_SIZE / 2,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.5,
-    shadowRadius: 6,
-    elevation: 5,
-  },
-  thumbInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#fff",
-  },
-  stepLabelsRow: {
-    width: TRACK_WIDTH,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: THUMB_SIZE / 2 - 8,
-  },
-  stepLabel: {
-    color: "#3D2F5A",
-    fontSize: 12,
-    fontWeight: "600",
-    width: 16,
-    textAlign: "center",
-  },
-  axisRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 2,
-  },
-  axisLabel: {
-    color: "#4A3860",
-    fontSize: 11,
-  },
-  hint: {
-    fontSize: 13,
-    fontStyle: "italic",
-    marginTop: 2,
-  },
-});
-
-// Main Screen Component
+// Main Screen
 export default function FeedbackScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
   const route = useRoute();
 
-  const { storeInDb = false, playlistIdx = 0 } = (route?.params || {}) as never;
+  const {
+    storeInDb = false,
+    playlistIdx = 0,
+    emotionState = "",
+  } = (route?.params || {}) as never;
 
   const [arousal, setArousal] = useState(0);
   const [valence, setValence] = useState(0);
 
   const [submitted, setSubmitted] = useState(false);
-  const [valueRestored, setValueRestored] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.85)).current;
@@ -347,10 +201,7 @@ export default function FeedbackScreen() {
       ]).start();
       setSubmitted(true);
 
-      const feedbackData = {
-        arousal,
-        valence,
-      };
+      const feedbackData = { arousal, valence, emotionState };
 
       await savePlaylistFeedback(feedbackData);
       if (!storeInDb) {
@@ -361,7 +212,6 @@ export default function FeedbackScreen() {
         await updateMusicTrajectory(user?.email!, sessionId, trajectoryId, {
           feedbackAfter: feedbackData,
         });
-
         await saveFeedbackSubmitted("post", playlistIdx || 0);
       }
     } catch (err: any) {
@@ -378,23 +228,9 @@ export default function FeedbackScreen() {
   };
 
   const populateForm = () => {
-    setArousal(7);
-    setValence(7);
+    setArousal(70);
+    setValence(70);
   };
-
-  useEffect(() => {
-    (async () => {
-      const { arousal = 0, valence = 0 } =
-        ((await getPlaylistFeedback()) as {
-          arousal: number;
-          valence: number;
-        }) || {};
-
-      setArousal(arousal);
-      setValence(valence);
-      setValueRestored(true)
-    })();
-  }, []);
 
   if (submitted) {
     return (
@@ -416,7 +252,6 @@ export default function FeedbackScreen() {
               <View key={i} style={[styles.dot, { opacity: op }]} />
             ))}
           </View>
-
           <TouchableOpacity
             onPress={handleGoBack}
             activeOpacity={0.75}
@@ -483,25 +318,15 @@ export default function FeedbackScreen() {
             </Text>
           </View>
 
-          <Card label="Your Energy & Happiness level right now?">
+          <Card label="Rate your current emotion state below.">
             <View style={styles.dualSliderRow}>
               <Text style={styles.dualSliderTitle}>⚡ Energy</Text>
-              <Text style={styles.dualSliderSub}>Very Low → Very High</Text>
             </View>
-            <ScaleRating
+            <VASlider
               value={arousal}
               onChange={setArousal}
-              hints={[
-                "1 — Very low",
-                "2 ",
-                "3 ",
-                "4 ",
-                "5 ",
-                "6 ",
-                "7 - Very High",
-              ]}
-              isParticipantsScreen={false}
-              valueRestored={valueRestored}
+              lowLabel="Very Low"
+              highLabel="Very High"
             />
 
             <View style={styles.dualDivider} />
@@ -510,24 +335,12 @@ export default function FeedbackScreen() {
               <Text style={styles.dualSliderTitle}>
                 ☀️ Pleasant / Positive Mood
               </Text>
-              <Text style={[styles.dualSliderSub, { marginTop: 4 }]}>
-                Very Unpleasant/negative → Very Pleasant/positive
-              </Text>
             </View>
-            <ScaleRating
+            <VASlider
               value={valence}
               onChange={setValence}
-              hints={[
-                "1 — Very Unpleasant",
-                "2 ",
-                "3 ",
-                "4 ",
-                "5 ",
-                "6 ",
-                "7 - Very Pleasant",
-              ]}
-              isParticipantsScreen={false}
-              valueRestored={valueRestored}
+              lowLabel="Very Unpleasant"
+              highLabel="Very Pleasant"
             />
           </Card>
 
@@ -552,7 +365,7 @@ export default function FeedbackScreen() {
 
           {process.env?.EXPO_PUBLIC_APP_ENV === "development" && (
             <TouchableOpacity
-              onPress={() => populateForm()}
+              onPress={populateForm}
               style={[styles.submitBtn, { marginTop: 20 }]}
             >
               <Text style={styles.submitText}>Populate Form</Text>
@@ -633,18 +446,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     flex: 1,
   },
-  textInput: {
-    color: "#E8DCFF",
-    fontSize: 15,
-    lineHeight: 22,
-    minHeight: 100,
-    padding: 0,
-  },
-  charCount: {
-    color: "#3D2F5A",
-    fontSize: 12,
-    alignSelf: "flex-end",
-  },
   submitBtn: {
     marginTop: 8,
     borderRadius: 16,
@@ -719,8 +520,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: -4,
+    marginBottom: -8,
     flexWrap: "wrap",
+    gap: 4,
   },
   dualSliderTitle: {
     color: "#E0D0FF",

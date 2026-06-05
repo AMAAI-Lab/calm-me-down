@@ -22,12 +22,12 @@ export default function LoginScreen() {
   const { login } = useAuth();
 
   const [form, setForm] = useState<UserProfile>({
-    name: "",
     nickName: "",
     age: "",
     email: "",
     favoriteGenre: "",
     favoriteBand: "",
+    profession: "",
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<
@@ -46,11 +46,6 @@ export default function LoginScreen() {
       }
     >
   > = {
-    name: {
-      required: true,
-      validate: (v) =>
-        v.trim().length < 1 ? "Please enter the name." : undefined,
-    },
     age: {
       required: true,
       validate: (v) => {
@@ -71,6 +66,15 @@ export default function LoginScreen() {
         return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
           ? undefined
           : "Please enter a valid email.";
+      },
+    },
+    profession: {
+      required: true,
+      validate: (v) => {
+        if (v.trim().length < 1) {
+          return "Please enter your profession.";
+        }
+        return undefined;
       },
     },
     nickName: {
@@ -190,18 +194,17 @@ export default function LoginScreen() {
       favoriteGenre: "Pop, Indie",
       favoriteBand: "Dua Lipa, The Weeknd",
       nickName: "Mike",
+      profession: "Student"
     };
 
     if (isP) {
       setForm({
         ...form,
-        name: "P 10",
         email: "p10@gmail.com",
       });
     } else {
       setForm({
         ...form,
-        name: "Mike",
         email: "mike@gmail.com",
       });
     }
@@ -224,14 +227,6 @@ export default function LoginScreen() {
       <Text style={styles.header}>Emotion to Lyric Generator 🎧</Text>
 
       <EmotionInput
-        label="Your name"
-        placeholder="e.g. Alex"
-        icon={<FontAwesome5 name="user" size={16} color="#fff" />}
-        value={form.name}
-        onChange={(t) => handleChange("name", t)}
-        error={touched.name ? errors.name : undefined}
-      />
-      <EmotionInput
         label="Nickname (optional)"
         placeholder="e.g. Gee, Star, Luna..."
         icon={<FontAwesome5 name="smile-beam" size={16} color="#fff" />}
@@ -239,6 +234,18 @@ export default function LoginScreen() {
         onChange={(t) => handleChange("nickName", t)}
         hint="Enter a name or nickname — this is how your lyrics will address you."
       />
+
+      <EmotionDropdown
+        label="Profession"
+        placeholder="Select your profession..."
+        icon={<FontAwesome5 name="briefcase" size={16} color="#fff" />}
+        value={form?.profession || ""}
+        moods={["Student", "Professional", "Other"]}
+        onChange={(t) => handleChange("profession", t)}
+        error={touched.profession ? errors.profession : undefined}
+        disableSearch={true}
+      />
+
       <EmotionInput
         label="Your age"
         placeholder="e.g. 24"

@@ -36,6 +36,7 @@ export const buildEmotionPath = (
   startEmotion: string,
   endEmotion: string,
   steps = PATH_DEFAULT_STEPS,
+  filterUnique = true,
 ): string[] => {
   const start = getEmotionPoint(startEmotion);
   const end = getEmotionPoint(endEmotion);
@@ -57,9 +58,15 @@ export const buildEmotionPath = (
   }
 
   // Match interpolated points to closest known emotions
-  return trajectory
-    .map((point) => findClosestEmotion(point.valence, point.arousal).emotion)
-    .filter((v, i, arr) => arr.indexOf(v) === i);
+  const finalPath = trajectory.map(
+    (point) => findClosestEmotion(point.valence, point.arousal).emotion,
+  );
+
+  if (!filterUnique) {
+    return finalPath;
+  }
+
+  return finalPath.filter((v, i, arr) => arr.indexOf(v) === i);
 };
 
 export const buildUniqueEmotionPath = (

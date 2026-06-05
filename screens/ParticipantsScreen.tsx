@@ -17,7 +17,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FontAwesome5 } from "@expo/vector-icons";
-import EmotionDropdown from "@/components/ui/emotion-dropdown";
 import HealthProviderSection from "@/components/ui/health-provider";
 import {
   computeTempoRange,
@@ -27,6 +26,7 @@ import {
 import {
   AI_TRAJECTORY_LENGTH,
   CONTINUOUS_PLAYBACK_MS,
+  DEBUG_MODE,
   DEFAULT_HEALTH_DATA,
   HealthProvider,
   LISTEN_BEFORE_GENERATE_MS,
@@ -64,6 +64,7 @@ import {
   addTrackToSession as addTrackToTrajectory,
   createMusicSession,
   createMusicTrajectory,
+  updateMusicTrajectory,
   updateTrackFields,
 } from "@/services/DbService";
 import { useNavigation } from "expo-router";
@@ -80,10 +81,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as Location from "expo-location";
 import { shareLogs, viewLogs } from "@/services/LoggerService";
 import LoadingPhrases from "@/components/ui/loading-phrases";
-import {
-  buildEmotionPath,
-  buildUniqueEmotionPath,
-} from "@/services/EmotionPathService";
+import { buildEmotionPath } from "@/services/EmotionPathService";
 import EmotionGrid from "@/components/ui/emotion-grid";
 
 type TargetEmotion = "calm" | "joyful";
@@ -98,7 +96,12 @@ interface PlaylistDef {
   context: ActivityCtx;
 }
 
-const ACTIVITY_OPTIONS: ActivityCtx[] = ["Sitting in Lab", "Walking Outside"];
+const ACTIVITY_SEQUENCE: ActivityCtx[] = [
+  "Sitting in Lab",
+  "Sitting in Lab",
+  "Walking Outside",
+  "Walking Outside",
+];
 
 const C = {
   bg: "#0D0D14",
@@ -170,7 +173,6 @@ export default function ParticipantsScreen() {
   const [targetEmotion, setTargetEmotion] = useState<TargetEmotion | null>(
     null,
   );
-  const [activityValue, setActivityValue] = useState<string>("");
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [newsData, setNewsData] = useState<NewsData | null>(null);
   const [healthData, setHealthData] = useState<HealthData | null>(null);
@@ -204,6 +206,10 @@ export default function ParticipantsScreen() {
     number,
     FeedbackSubmittedStatus
   > | null>({});
+  const [emotionCaptured, setEmotionCaptured] = useState<Record<
+    number,
+    FeedbackSubmittedStatus
+  > | null>({});
   const [finalUrlsReady, setFinalUrlsReady] = useState<Record<number, boolean>>(
     {},
   );
@@ -215,14 +221,12 @@ export default function ParticipantsScreen() {
   const lyricsRef = useRef<View>(null);
 
   const startHintMsg = useMemo(() => {
-    if (!startEmotion && !targetEmotion && !activityValue) {
-      return "Select your emotions and activity to continue";
+    if (!startEmotion && !targetEmotion) {
+      return "Select your emotions to continue";
     } else if (!startEmotion) {
-      return "Select your starting emotion above";
+      return "Please select your starting emotion state above";
     } else if (!targetEmotion) {
       return "Select your target emotion above";
-    } else if (!activityValue) {
-      return "Select your activity context above";
     } else if (Platform.OS === "ios" && !healthData) {
       return "Please authorize the Apple Health";
     } else if (!feedbackSubmitted?.[0]?.pre) {
@@ -230,35 +234,21 @@ export default function ParticipantsScreen() {
     }
 
     return "";
-  }, [
-    startEmotion,
-    targetEmotion,
-    activityValue,
-    healthData,
-    feedbackSubmitted,
-  ]);
+  }, [startEmotion, targetEmotion, healthData, feedbackSubmitted]);
 
   const nextPlaylistMsg = useMemo(() => {
-    if (!feedbackSubmitted?.[playlistIdx]?.post) {
+    if (!emotionCaptured?.[playlistIdx]?.post) {
+      return "Please update your emotion state after listening to this playlist.";
+    } else if (!feedbackSubmitted?.[playlistIdx]?.post) {
       return "Please review the playlist in google form and also update the mood meter here.";
+    } else if (!emotionCaptured?.[playlistIdx + 1]?.pre) {
+      return "Please update the emotion state before starting the next one.";
     } else if (!feedbackSubmitted?.[playlistIdx + 1]?.pre) {
       return "Please review the playlist in google form and also update the mood meter here before starting the next one.";
-    } else if (!startEmotion) {
-      return "Please select your starting emotion above";
     }
 
     return "Tap below to begin the next playlist.";
-  }, [startEmotion, feedbackSubmitted, playlistIdx]);
-
-  const activitySequence = useMemo(() => {
-    if (!sequence?.length) return [];
-
-    const context = PLAYLIST_DEFS[sequence[0]].context;
-    const otherContext =
-      context === "Sitting in Lab" ? "Walking Outside" : "Sitting in Lab";
-
-    return [context, context, otherContext, otherContext];
-  }, [sequence]);
+  }, [feedbackSubmitted, playlistIdx, emotionCaptured]);
 
   const currPlaylistFinished =
     emotionTrajectory.length > 0 &&
@@ -279,7 +269,9 @@ export default function ParticipantsScreen() {
     loading ||
     !startEmotion ||
     !feedbackSubmitted?.[playlistIdx]?.post ||
-    !feedbackSubmitted?.[playlistIdx + 1]?.pre;
+    !feedbackSubmitted?.[playlistIdx + 1]?.pre ||
+    !emotionCaptured?.[playlistIdx]?.post ||
+    !emotionCaptured?.[playlistIdx + 1]?.pre;
   const showMoodMeterButton =
     !loading &&
     ((!songQueue.length && !feedbackSubmitted?.[playlistIdx]?.pre) ||
@@ -292,21 +284,7 @@ export default function ParticipantsScreen() {
     loading ||
     nextSongLoading ||
     (songQueue.length > 0 && (!currPlaylistFinished || !ratingDone));
-  const nextActivity = activitySequence?.[playlistIdx + 1] || "";
-
-  const activityIcon = (
-    <FontAwesome5
-      name={
-        activityValue.toLowerCase().includes("lab")
-          ? "flask"
-          : activityValue.toLowerCase().includes("out")
-            ? "tree"
-            : "map-marker-alt"
-      }
-      size={16}
-      color="#fff"
-    />
-  );
+  const currentActivity = ACTIVITY_SEQUENCE?.[playlistIdx] || "Sitting in Lab";
 
   const clearStates = async () => {
     setSongQueue([]);
@@ -374,7 +352,7 @@ export default function ParticipantsScreen() {
       PHYSICAL CONTEXT
       ${isHrValid ? `- Heart rate in last 5 min: ${healthData.heartRate} bpm` : ""}
       ${isStepsValid ? `- Movement in last 5 min: ${healthData.steps} steps` : ""}
-      - Current or upcoming activity: ${activityValue || "None specified"}
+      - Current or upcoming activity: ${currentActivity || "None specified"}
 
       ENVIRONMENT
       - Location: ${weather?.city || "Unknown"}
@@ -413,21 +391,19 @@ export default function ParticipantsScreen() {
   };
 
   const generateTrajectory = (givenTargetEmotion?: string) => {
-    // return [startEmotion || "Bored", givenTargetEmotion || targetEmotion || "Calm"];
+    if (DEBUG_MODE) {
+      return [
+        startEmotion || "Bored",
+        givenTargetEmotion || targetEmotion || "Calm",
+      ];
+    }
 
     let trajec = buildEmotionPath(
       startEmotion,
       givenTargetEmotion || targetEmotion || "Calm",
       AI_TRAJECTORY_LENGTH - 2,
+      false,
     );
-
-    if (trajec.length < AI_TRAJECTORY_LENGTH) {
-      trajec = buildUniqueEmotionPath(
-        startEmotion,
-        givenTargetEmotion || targetEmotion || "Calm",
-        AI_TRAJECTORY_LENGTH,
-      );
-    }
 
     if (trajec.length === 1) {
       return [
@@ -512,7 +488,7 @@ export default function ParticipantsScreen() {
     const currTrajectory = generateTrajectory(givenTargetEmotion);
     setEmotionTrajectory(currTrajectory);
     try {
-      const feedbackBefore = await getPlaylistFeedback();
+      const feedbackData = await getPlaylistFeedback();
       const sessionId = await getSessionId();
       const newTrajectoryID = await createMusicTrajectory(
         user?.email!,
@@ -523,7 +499,7 @@ export default function ParticipantsScreen() {
           songPrompt: currentLyrics,
           playlistType: "trajectory",
           trajectoryNumber: nextPlaylistIdx + 1,
-          feedbackBefore,
+          feedbackBefore: { ...feedbackData, emotionState: startEmotion },
         },
       );
       await saveTrajectoryId(newTrajectoryID);
@@ -572,7 +548,7 @@ export default function ParticipantsScreen() {
     setEmotionTrajectory(currTrajectory);
 
     try {
-      const feedbackBefore = await getPlaylistFeedback();
+      const feedbackData = await getPlaylistFeedback();
       const sessionId = await getSessionId();
       const newTrajectoryID = await createMusicTrajectory(
         user?.email!,
@@ -581,7 +557,7 @@ export default function ParticipantsScreen() {
           emotionTrajectory: currTrajectory,
           playlistType: "savedPlaylist",
           trajectoryNumber: nextPlaylistIdx + 1,
-          feedbackBefore,
+          feedbackBefore: { ...feedbackData, emotionState: startEmotion },
         },
       );
       await saveTrajectoryId(newTrajectoryID);
@@ -612,8 +588,8 @@ export default function ParticipantsScreen() {
     setLoading(true);
 
     try {
-      if (!startEmotion || !targetEmotion || !activityValue) return;
-      const seq = pickSequence(targetEmotion, activityValue);
+      if (!startEmotion || !targetEmotion) return;
+      const seq = pickSequence(targetEmotion, currentActivity);
       setSequence(seq);
 
       const newSessionID = await createMusicSession(
@@ -657,8 +633,6 @@ export default function ParticipantsScreen() {
       const newPlaylistDef = PLAYLIST_DEFS[nextSequenceId];
 
       const { playlistType, targetEmotion: newTargetEmotion } = newPlaylistDef;
-      setActivityValue(nextActivity);
-      setTargetEmotion(newTargetEmotion);
       if (playlistType === "Trajectory") {
         await generateLyricsAndSong(newTargetEmotion, nextPlaylistIdx);
       } else {
@@ -899,8 +873,62 @@ export default function ParticipantsScreen() {
         storeInDb:
           feedbackSubmitted?.[playlistIdxProp]?.pre && currPlaylistFinished,
         playlistIdx: playlistIdxProp,
+        emotionState: startEmotion,
       },
     } as never);
+  };
+
+  const handleStartEmotion = async (emotion: string) => {
+    setStartEmotion(emotion);
+
+    const currPlaylistEC = emotionCaptured?.[playlistIdx] || {
+      pre: false,
+      post: false,
+    };
+
+    const bothCaptured = currPlaylistEC?.pre && currPlaylistEC?.post;
+    if (bothCaptured && !feedbackSubmitted?.[playlistIdx]?.post) {
+      return;
+    }
+
+    if (bothCaptured && playlistIdx + 1 < sequence.length) {
+      const nextSequenceId = sequence[playlistIdx + 1];
+      const newPlaylistDef = PLAYLIST_DEFS[nextSequenceId];
+
+      setTargetEmotion(newPlaylistDef.targetEmotion);
+    }
+
+    const newPlaylistIdx = bothCaptured ? playlistIdx + 1 : playlistIdx;
+    const type =
+      emotionCaptured?.[newPlaylistIdx]?.pre && currPlaylistFinished
+        ? "post"
+        : "pre";
+
+    if (type === "post" && playlistIdx !== newPlaylistIdx) {
+      return;
+    }
+
+    const newPlaylistEC = emotionCaptured?.[newPlaylistIdx] || {
+      pre: false,
+      post: false,
+    };
+
+    newPlaylistEC[type] = true;
+
+    setEmotionCaptured((prev) => ({
+      ...prev,
+      [newPlaylistIdx]: { ...newPlaylistEC },
+    }));
+
+    if (type === "post" && !bothCaptured) {
+      const feedbackData = await getPlaylistFeedback();
+      const sessionId = await getSessionId();
+      const trajectoryId = await getTrajectoryId();
+
+      await updateMusicTrajectory(user?.email!, sessionId, trajectoryId, {
+        feedbackAfter: { ...feedbackData, emotionState: emotion },
+      });
+    }
   };
 
   // Fetch news and weather info
@@ -1144,6 +1172,33 @@ export default function ParticipantsScreen() {
         <Text style={styles.eyebrow}>EMOTION PLAYLIST</Text>
       </View>
 
+      {/* Mood meter button */}
+      {showMoodMeterButton && (
+        <View style={[styles.section]}>
+          {allPlaylistsCompleted && (
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionTitle}>
+                {`All playlists completed! Please update the mood meter and emotion state.`}
+              </Text>
+            </View>
+          )}
+
+          <Pressable
+            onPress={handleNavigate}
+            style={[
+              styles.startBtn,
+              { borderWidth: 1, backgroundColor: "#1E1235" },
+            ]}
+          >
+            <Text
+              style={[styles.startBtnText, { color: "#B07FE0", fontSize: 18 }]}
+            >
+              Update mood meter
+            </Text>
+          </Pressable>
+        </View>
+      )}
+
       {/* Current Emotion selection */}
       <View
         style={styles.section}
@@ -1152,7 +1207,7 @@ export default function ParticipantsScreen() {
         <View style={styles.sectionHead}>
           <Text style={styles.sectionTitle}>
             {isEmotionLocked
-              ? "Starting emotion"
+              ? "Starting emotion state"
               : "How do you feel right now?"}
           </Text>
           {isEmotionLocked && (
@@ -1169,7 +1224,10 @@ export default function ParticipantsScreen() {
           pointerEvents={isEmotionLocked ? "none" : "auto"}
           style={isEmotionLocked ? { opacity: 0.4 } : undefined}
         >
-          <EmotionGrid emotion={startEmotion} setEmotion={setStartEmotion} />
+          <EmotionGrid
+            emotion={startEmotion}
+            setEmotion={(val) => handleStartEmotion(val)}
+          />
         </View>
       </View>
 
@@ -1206,36 +1264,55 @@ export default function ParticipantsScreen() {
         </View>
       </View>
 
-      {/* Activity selection */}
-      <View style={styles.section}>
-        <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>
-            {isLocked ? "Activity Context" : "Where are you?"}
-          </Text>
-          {isLocked && (
-            <FontAwesome5
-              name="lock"
-              size={11}
-              color={C.textDim}
-              style={{ marginLeft: 4 }}
-            />
+      {/* Trajectory Number and Location Labels */}
+      {(currentSong || currentActivity) && (
+        <View
+          style={{
+            gap: 5,
+            backgroundColor: "#181B24",
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: "#34373C",
+            marginHorizontal: 24,
+            marginTop: 24,
+            marginBottom: 15,
+            paddingHorizontal: 15,
+            paddingVertical: 10,
+          }}
+        >
+          {currentSong && (
+            <View
+              style={{
+                flexDirection: "row",
+                gap: 4,
+                justifyContent: "flex-start",
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ color: C.text, fontSize: 15, opacity: 0.9 }}>
+                Trajectory Number:
+              </Text>
+              <Text style={styles.sectionTitle}>{playlistIdx + 1}</Text>
+            </View>
+          )}
+
+          {currentActivity && (
+            <View
+              style={{
+                flexDirection: "row",
+                gap: 4,
+                justifyContent: "flex-start",
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ color: C.text, fontSize: 15, opacity: 0.9 }}>
+                Location:
+              </Text>
+              <Text style={styles.sectionTitle}>{currentActivity}</Text>
+            </View>
           )}
         </View>
-
-        <View
-          pointerEvents={isLocked ? "none" : "auto"}
-          style={isLocked ? { opacity: 0.4 } : undefined}
-        >
-          <EmotionDropdown
-            value={activityValue}
-            placeholder="Select activity context…"
-            moods={ACTIVITY_OPTIONS}
-            icon={activityIcon}
-            disableSearch={true}
-            onChange={setActivityValue}
-          />
-        </View>
-      </View>
+      )}
 
       {/* Health Provider */}
       {!healthData && (
@@ -1364,6 +1441,7 @@ export default function ParticipantsScreen() {
             alignItems: "center",
             paddingHorizontal: 5,
             marginHorizontal: 20,
+            marginTop: 5,
           }}
         >
           <Animated.View
@@ -1418,56 +1496,6 @@ export default function ParticipantsScreen() {
             "Almost ready — your song is taking shape...",
           ]}
         />
-      )}
-
-      {/* Next Activity Label */}
-      {!!nextActivity && (
-        <View
-          style={[
-            styles.section,
-            {
-              marginTop: 40,
-              flexDirection: "row",
-              gap: 4,
-              justifyContent: "flex-start",
-              alignItems: "center",
-            },
-          ]}
-        >
-          <Text style={{ color: C.text, fontSize: 15 }}>
-            Activity for next playlist:
-          </Text>
-          <Text style={styles.sectionTitle}>
-            {activitySequence[playlistIdx + 1]}
-          </Text>
-        </View>
-      )}
-
-      {/* Mood meter button */}
-      {showMoodMeterButton && (
-        <View style={[styles.section, !nextActivity && { marginTop: 40 }]}>
-          {allPlaylistsCompleted && (
-            <View style={styles.sectionHead}>
-              <Text style={styles.sectionTitle}>
-                {`You've completed all the playlists of this session. Please update the mood meter!`}
-              </Text>
-            </View>
-          )}
-
-          <Pressable
-            onPress={handleNavigate}
-            style={[
-              styles.startBtn,
-              { borderWidth: 1, backgroundColor: "#1E1235" },
-            ]}
-          >
-            <Text
-              style={[styles.startBtnText, { color: "#B07FE0", fontSize: 18 }]}
-            >
-              Update mood meter
-            </Text>
-          </Pressable>
-        </View>
       )}
 
       {/* Start button */}
@@ -1533,6 +1561,17 @@ export default function ParticipantsScreen() {
         />
       )}
 
+      {/* All playlists completed Message */}
+      {allPlaylistsCompleted && (
+        <View style={[styles.section]}>
+          <View style={styles.sectionHead}>
+            <Text style={styles.sectionTitle}>
+              {`You've completed all the playlists of this session. Please update the mood meter and emotion state above!`}
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* Logout button */}
       <View
         style={[styles.sectionHead, { gap: 0, marginTop: 60, opacity: 0.5 }]}
@@ -1583,17 +1622,21 @@ export default function ParticipantsScreen() {
           </Text>
         </View>
       )} */}
-      {/* <Pressable
-        onPress={handleNavigate}
-        style={[
-          styles.startBtn,
-          { borderWidth: 1, backgroundColor: "#1E1235" },
-        ]}
-      >
-        <Text style={[styles.startBtnText, { color: "#B07FE0", fontSize: 18 }]}>
-          {`Update mood meter (Test)`}
-        </Text>
-      </Pressable> */}
+      {DEBUG_MODE && (
+        <Pressable
+          onPress={handleNavigate}
+          style={[
+            styles.startBtn,
+            { borderWidth: 1, backgroundColor: "#1E1235" },
+          ]}
+        >
+          <Text
+            style={[styles.startBtnText, { color: "#B07FE0", fontSize: 18 }]}
+          >
+            {`Update mood meter (Test)`}
+          </Text>
+        </Pressable>
+      )}
     </ScrollView>
   );
 }
