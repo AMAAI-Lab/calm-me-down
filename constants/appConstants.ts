@@ -63,7 +63,7 @@ export const EMOTION_MAP: EmotionPoint[] = [
   { emotion: "Anxious", valence: 4.41, arousal: 8.27 }, // NRC+ANEW
   { emotion: "Nervous", valence: 3.23, arousal: 7.83 }, // NRC+ANEW
   { emotion: "Distressed", valence: 2.17, arousal: 7.51 }, // NRC+ANEW
-  { emotion: "Stressed", valence: 2.50, arousal: 7.66 }, // NRC+ANEW
+  { emotion: "Stressed", valence: 2.5, arousal: 7.66 }, // NRC+ANEW
   { emotion: "Frustrated", valence: 2.19, arousal: 6.52 }, // NRC+ANEW
   { emotion: "Ashamed", valence: 2.4, arousal: 6.29 }, // NRC
   { emotion: "Fearful", valence: 2.08, arousal: 6.17 }, // NRC+ANEW
@@ -484,22 +484,6 @@ export const EMOTION_TEMPO_MAP = {
   joyful: [105, 135],
 };
 
-export const MOCK_LYRICS = `
-  Line 1 of the mock lyrics
-  Line 2 of the mock lyrics
-  Line 3 of the mock lyrics
-  Line 4 of the mock lyrics
-
-  Line 5 of the mock lyrics
-  Line 6 of the mock lyrics
-  Line 7 of the mock lyrics
-  Line 8 of the mock lyrics
-  
-  Line 9 of the mock lyrics
-  Line 10 of the mock lyrics
-  Line 11 of the mock lyrics
-  Line 12 of the mock lyrics
-`;
 export const EMOTION_GRID: string[][] = [
   ["Stressed", "Angry", "Anxious", "Frustrated"],
   ["Excited", "Energetic", "Hopeful", "Joyful"],
@@ -511,7 +495,8 @@ export const PRE_GENERATED_PLAYLIST = {
   calm: [
     {
       id: "1",
-      title: "Tate McRae, Jeremy Zucker - that way",
+      // title: "Tate McRae, Jeremy Zucker - that way",
+      title: "Your Personal Playlist",
       audioUrl:
         "https://www.image2url.com/r2/default/audio/1778741665093-59d08d61-3a82-48ca-9479-3250af7d8c09.mp3",
       provider: "MOCK",
@@ -570,7 +555,8 @@ export const PRE_GENERATED_PLAYLIST = {
     },
     {
       id: "2",
-      title: "At My Worst",
+      // title: "At My Worst",
+      title: "Your Personal Playlist",
       audioUrl:
         "https://www.image2url.com/r2/default/audio/1778741914719-94c8546e-53b0-4f6c-be1b-cdff7a290df4.mp3",
       provider: "MOCK",
@@ -612,7 +598,8 @@ export const PRE_GENERATED_PLAYLIST = {
     },
     {
       id: "3",
-      title: "Lonely",
+      // title: "Lonely",
+      title: "Your Personal Playlist",
       audioUrl:
         "https://www.image2url.com/r2/default/audio/1778741966574-c4a1b2d7-866b-4fb7-a60e-939f54a62e3f.mp3",
       provider: "MOCK",
@@ -661,7 +648,8 @@ export const PRE_GENERATED_PLAYLIST = {
     },
     {
       id: "4",
-      title: "Til Death Do Us Part",
+      // title: "Til Death Do Us Part",
+      title: "Your Personal Playlist",
       audioUrl:
         "https://www.image2url.com/r2/default/audio/1778742015318-04cddb11-6476-4756-b5a0-70e3ca0728cc.mp3",
       provider: "MOCK",
@@ -727,7 +715,8 @@ export const PRE_GENERATED_PLAYLIST = {
   joyful: [
     {
       id: "1",
-      title: "As It Was",
+      // title: "As It Was",
+      title: "Your Personal Playlist",
       audioUrl:
         "https://www.image2url.com/r2/default/audio/1778742697895-6009e483-ed3b-4d88-ba19-0b9519eb530c.mp3",
       provider: "MOCK",
@@ -776,7 +765,8 @@ export const PRE_GENERATED_PLAYLIST = {
     },
     {
       id: "2",
-      title: "Belong Together",
+      // title: "Belong Together",
+      title: "Your Personal Playlist",
       audioUrl:
         "https://www.image2url.com/r2/default/audio/1778742816618-73a263f3-34e7-476c-81b7-530e1ad320d2.mp3",
       provider: "MOCK",
@@ -824,7 +814,8 @@ export const PRE_GENERATED_PLAYLIST = {
     },
     {
       id: "3",
-      title: "Ain't No Mountain High Enough",
+      // title: "Ain't No Mountain High Enough",
+      title: "Your Personal Playlist",
       audioUrl:
         "https://www.image2url.com/r2/default/audio/1778742870579-f7949513-3682-49c6-8156-118d8e114959.mp3",
       provider: "MOCK",
@@ -877,7 +868,8 @@ export const PRE_GENERATED_PLAYLIST = {
     },
     {
       id: "4",
-      title: "Until I Found You",
+      // title: "Until I Found You",
+      title: "Your Personal Playlist",
       audioUrl:
         "https://www.image2url.com/r2/default/audio/1778743282741-9c175eb7-b8d2-4cea-b8bd-31ca17c348ae.mp3",
       provider: "MOCK",
@@ -912,7 +904,8 @@ export const PRE_GENERATED_PLAYLIST = {
     },
     {
       id: "5",
-      title: "So Easy (To Fall In Love)",
+      // title: "So Easy (To Fall In Love)",
+      title: "Your Personal Playlist",
       audioUrl:
         "https://www.image2url.com/r2/default/audio/1776774880658-0fced3b3-4ea6-4258-8504-734b74992e22.mp3",
       provider: "MOCK",
@@ -972,3 +965,409 @@ export const PRE_GENERATED_PLAYLIST = {
 };
 
 export const AI_TRAJECTORY_LENGTH = 4;
+
+export const ADD_PROFESSION_TO_PROMPT = false;
+
+export const NON_AI_PLAYLIST_TYPE: "PRE_GEN" | "JAMENDO" = "JAMENDO";
+
+export const JAMENDO_PLAYLIST = {
+  calm: [
+    {
+      id: "1",
+      // title: "Horizons - Train Room",
+      title: "Your Personal Playlist",
+      audioUrl:
+        "https://prod-1.storage.jamendo.com/?trackid=1321406&format=mp31&from=9AtCOlwkbI6GWRs7wMTN9w%3D%3D%7CtqCUvoRL%2FvZXlOw77Gp4Qw%3D%3D",
+      provider: "MOCK",
+      lyrics: `
+        Maybe your tired of the waves that come and knock you of your feet
+        I long to see you on a day when you won't drown
+        The constant dragging and deceit
+        Your hands been tied and made to greet 
+        A life thats bounded to a world that keeps on taking everyday
+
+        Maybe your tired of the strains, the lonely highs, the constant rains
+        That seep right through you on the days your coming down
+        Maybe relying on horizons when the skies will fill with diamonds
+        It ain't surprising that the love that you have lost is in your mind 
+
+        So if we go 
+        We'll take the highs and lows with us
+        While we seek 
+        Forever free from here
+
+        Maybe your tired of the waves that come and knock you of your feet
+        I long to see you on a day when you won't drown
+        Maybe the answer lies beneath these scattered words that flood our streets and now the lights without the power flicker on into the night
+
+        So if we go 
+        We'll take the highs and lows with us
+        While we seek 
+        Forever free from here
+
+        So if we go 
+        We'll take the highs and lows with us
+        While we seek 
+        Forever free from here
+
+        So if we go 
+        We'll take the highs and lows with us
+        While we seek 
+        Forever free from here
+
+        So if we go 
+        We'll take the highs and lows with us
+        While we seek 
+        Forever free from here
+      `,
+    },
+    {
+      id: "2",
+      // title: "North Hollywood Skyline - Brady Harris",
+      title: "Your Personal Playlist",
+      audioUrl: "https://prod-1.storage.jamendo.com/?trackid=291174&format=mp31&from=MQZOAq%2B3OGa%2BkPJNWcL5Aw%3D%3D%7CxCWrjhpRbLU%2BfM0sM%2FvyNA%3D%3D",
+      provider: "MOCK",
+      lyrics: `
+        We can get a drink at the Money Tree
+        Or come see me at the UBG
+        Either way it’s okay
+        You can get home on the subway
+        In my mind
+        Nights are fine
+        Most of the time
+
+        ‘Neath the North Hollywood Skyline
+        North Hollywood Skyline
+        North Hollywood Skyline
+        North Hollywood Skyline
+
+        You can get a tea or an antique cloth
+        And if you drove find somewhere to park
+        Not a lot of thrills you can buy
+        That’s okay cos in my mind
+        The air is fine
+        Most of the time
+        Except summertime
+
+        ‘Neath the North Hollywood Skyline
+        North Hollywood Skyline
+        North Hollywood Skyline
+        North Hollywood Skyline
+      `,
+    },
+    {
+      id: "3",
+      // title: "Winter Sunlight (airtone feat. Leza2unes) - Snowflake & ccMixter",
+      title: "Your Personal Playlist",
+      audioUrl: "https://prod-1.storage.jamendo.com/?trackid=472893&format=mp31&from=pCFTaJKC%2BPuF5h%2FghKdukA%3D%3D%7CLwRCsKWj63M8iGV4amrNcQ%3D%3D",
+      provider: "MOCK",
+      lyrics: `
+        You are like the winter sun
+        Shining down until your day is done
+        Spiritual finding, pure deep down inside
+        Within me
+
+        Naturally I feel everywhere
+        In our ebbing sun, present on his hair
+        Solstice horizon, wisdom wells up inside him
+        Reflectively
+
+        Moment-by-moment meditatively
+        Stillness snowdrift into reverie
+        Awareness unfolding
+        To awaken your soul
+        Set you free
+
+        Mindfully watching all you do
+        What comes in, you are open to
+        A welcoming feeling,
+        Yule Tide is the season for me
+
+        So you are like the winter sun
+        Shining down until your light is done
+        Spiritual findings, pure deep down inside
+        Within me
+      `,
+    },
+    {
+      id: "4",
+      // title: "You're Always With Me - Marco Margna",
+      title: "Your Personal Playlist",
+      audioUrl: "https://prod-1.storage.jamendo.com/?trackid=1121394&format=mp31&from=sJJv%2FhT1wKinsei35JAS8w%3D%3D%7CTjL86fBk3dyEpuy67KVueA%3D%3D",
+      provider: "MOCK",
+      lyrics: `
+        I’ve seen the world from many sides
+        The sun made love to the sea
+        I’ve danced with angels in the sky
+        And with mermaids deep in the sea
+        I’ve crossed the mountains hundred times
+        Rainbow all over me
+        But those things ain’t nothing, next to your love
+        You’re the one that I need
+
+        You're always with me
+        Wherever we are
+        You can touch my heart and my soul
+        Your love is with me
+        Deep in my heart
+        You and me
+
+        I’ve touched the sun and walked on clouds
+        Like a bird a flew in the sky
+        Seen seven wonders of the world
+        And Marie Antoinette in Versailles
+      `,
+    },
+    {
+      id: "5",
+      // title: "Gravity - Steven Dunston",
+      title: "Your Personal Playlist",
+      audioUrl: "https://prod-1.storage.jamendo.com/?trackid=6722&format=mp31&from=640purZh1EuQVjkCBSHMXQ%3D%3D%7Cad5%2FaBZ33sL6tAXHmJcEYQ%3D%3D",
+      provider: "MOCK",
+      lyrics: `
+        It's true you're gone baby I saw you leave
+        You got on the airplane and waved back at me
+        You taxied the runway and climbed up the sky
+        And left me at home here with myself and I
+
+        But no matter how far away you might be
+        I can still feel the weight of your body on me
+        Baby, that’s gravity
+
+        Back in the orbit of everyday things
+        Objects are pulling my celestial strings
+        Forcing upon me their new point of view
+        As if I no longer orbit around you
+
+        Days pass me by and the phone doesn't ring
+        You're far away and accelerating
+        I'd pull you back if I had enough weight
+        Escape velocity says it's too late
+
+        But no matter how far away you might be
+        I can still feel the weight of your body on me
+        Baby, that’s gravity
+      `,
+    },
+  ],
+  joyful: [
+    {
+      id: "1",
+      // title: "What Is Love - Melanie Ungar",
+      title: "Your Personal Playlist",
+      audioUrl: "https://prod-1.storage.jamendo.com/?trackid=1204669&format=mp31&from=6t2WYTMKhQZd3IFwJmhgmQ%3D%3D%7CrurfNYLMs1VpakDYKh6YJw%3D%3D",
+      provider: "MOCK",
+      lyrics: `
+        Put on my red heels and did my hair
+        Waited up all night 'cause i thought you care
+        And now you're calling me, saying "babe, don't start a fight
+        Stop living in a fantasy," uhm sorry excuse me?
+
+        This isn't how i thought it would be,
+        This isn't the fairytale you promised me
+
+        What is love 'cause i'm really not sure anymore
+        Butterflies in my stomach, good night kisses no more
+        Where are the passion, the romance, and those flowers at my door?
+        Where is love, because i surely don't know?
+        I don't know
+
+        Think back to how we first met,
+        Or did you already forget?
+        Like the time you forgot my birthday
+        You stood there with nothing to say
+        What about an apology?
+        Oh yeah, it's only me (add harmony)
+
+        This isn't how i thought it would be,
+        This isn't the fairytale you promised me
+
+        What is love 'cause i'm really not sure anymore
+        Butterflies in my stomach, good night kisses no more
+        Where are the passion, the romance, and those flowers at my door?
+        Where is love, because i surely don't know?
+        I don't know
+
+        Oh help me tap 3 times to get rid of you, i wanna tap my heels and get over you (x2)
+        Over you, over you
+
+        What is love 'cause i'm really not sure anymore
+        Butterflies in my stomach, good night kisses no more
+        I need the passion, the romance, and those flowers at my door?
+        Where is love 'cause it's not with you anymore
+        Anymore!
+      `,
+    },
+    {
+      id: "2",
+      // title: "It Could Be You - STEEP",
+      title: "Your Personal Playlist",
+      audioUrl: "https://prod-1.storage.jamendo.com/?trackid=1162014&format=mp31&from=1fSrPI%2Bo%2B%2FSFP5HUtpBmaA%3D%3D%7C1KVr%2FrUy89Ae22SUa49uTw%3D%3D",
+      provider: "MOCK",
+      lyrics: `
+        Another place, another town, memories lost, but for now
+        Breathing in, breathing out to get my thoughts back off the ground
+        Walking down another street, passing by, people meet
+        anyhow, just for now I'm realizing what I need
+        And then you come to my mind
+        well I guess that's kinda sign
+        Don't take long to realize
+        I think it's time, so I raise my pace and
+
+        I am running around, looking for you
+        It could be you, It could be you, It could be you
+        Searching all over town, just to be sure
+        It could be you, It could be you, It could be you
+        Where you're hanging around, seems nothing new
+        It could be you, It could be you, It could be you
+        I’m finally asking you out: how do you do, do, do, do?
+
+        Look around, see me stare, looking back, now I'm there
+        in the sand, take my hand, let's find something for us to share
+        Making out, touching down, every smile in your face,
+        seems to me, brings up thoughts of every second that I wasted
+        Without you right by my side
+        How did manage just to hide
+        that this feels so very right?
+        But I'm restless, so I raise my pace and
+
+        I am running around, looking for you
+        It could be you, It could be you, It could be you
+        Searching all over town, just to be sure
+        It could be you, It could be you, It could be you
+        Where you're hanging around, seems nothing new
+        It could be you, It could be you, It could be you
+        I’m finally asking you out: how do you do, do, do, do?
+
+        The only reason, can’t you see?
+        That keeps me running down that street
+        is any chance for us to meet.
+        It could be you I’m looking for
+        I think I’ve never been so sure
+        Catch you and never let you go
+
+        I am running around, looking for you
+        It could be you, It could be you, It could be you
+        Searching all over town, just to be sure
+        It could be you, It could be you, It could be you
+        Where you're hanging around, seems nothing new
+        It could be you, It could be you, It could be you
+        I’m finally asking you out: how do you do, do, do, do?
+      `,
+    },
+    {
+      id: "3",
+      // title: "The Feel - Backnbloom",
+      title: "Your Personal Playlist",
+      audioUrl: "https://prod-1.storage.jamendo.com/?trackid=1071004&format=mp31&from=aauynZgqP5xdsIaDK8uLJQ%3D%3D%7CrPMKAuspjn%2B6INSKQ7mbBg%3D%3D",
+      provider: "MOCK",
+      lyrics: `
+        Can u tell me how the sun can shine as rain drops on my hand?
+        How a bird will fly into the night not knowing where to land?
+        There's a reason we all wake and rise, a line of common ground
+        And a secret that we all should know,
+        This secret that I found
+
+        Do not let go
+        It’s only a feeling
+        A yes or no
+        Break through the ceiling
+        Your choices can lift you up or pull you under
+
+        Just keep the feel flowing
+        Just keep the feel flowing
+        Just keep the feel flowing, flowing
+        Just keep the feel flowing
+
+        See the architects of buildings tall, one seed became a plan
+        To the doubters tossing mocking words they took a stand
+        For a moment let your mind resolve, electing what is right
+        Turning over thoughts, go for the prize with all your might
+
+        Do not let go
+        It’s only a feeling
+        A yes or no
+        Break through the ceiling
+        Your choices can lift you up or pull you under
+
+        Just keep the feel flowing
+        Just keep the feel flowing
+        Just keep the feel flowing, flowing
+        Just keep the feel flowing
+        Keep the feel flowing
+      `,
+    },
+    {
+      id: "4",
+      // title: "Love is a Journey - Robert Avellanet",
+      title: "Your Personal Playlist",
+      audioUrl: "https://prod-1.storage.jamendo.com/?trackid=1119654&format=mp31&from=YN3XsDx8jcazay7OI1WvzQ%3D%3D%7CkRwkgJkPLqovWB3JMClMug%3D%3D",
+      provider: "MOCK",
+      lyrics: `
+        love is a journey, love is a journey
+        and i want to go, everywhere with you
+        theres lots of places to explore
+        and this is what life is for
+        lets go
+        oh oh oh
+        lets go
+        oh oh oh oh
+        life is a journey, life is a jouney
+        and i want to go, and live it up with you
+        so come with me and take my hand
+        enjoy the ride here i am
+        lets go
+        oh oh oh
+        lets go
+        oh oh oh oh
+        lets see the world, just take my hand
+        its all apart of this master plan
+        theres so much beauty for both of us to see
+        love is a journey, wanna go everywhere with you
+        come with me baby
+        ((tommorrow never comes))
+        lets go
+        oh oh oh
+        life is a journey
+        wanna go everywhere with you
+      `,
+    },
+    {
+      id: "5",
+      // title: "Do You Still Dream - Explosive Ear Candy",
+      title: "Your Personal Playlist",
+      audioUrl: "https://prod-1.storage.jamendo.com/?trackid=1313604&format=mp31&from=KAoxihnLMoMxaUaRJCz9lA%3D%3D%7C18KY5JYvhKxE2WwPxyqjIg%3D%3D",
+      provider: "MOCK",
+      lyrics: `
+        Do you still dream
+        About when we were young
+        And the world was our playground to claim
+        Everything seemed like a new gift just waiting for us to share.
+
+        Do you still dream
+        That we’re falling in love
+        For the first time again and again
+        Walking on clouds with the sun in our pockets without a care.
+
+        I open my eyes and I see you
+        You’re there by my side all along
+        The smile on your face
+        Always tells me love came true (oohhhhhh).
+
+        Do you still dream
+        Of the things that we’ve done
+        And the things that we’ll do up ahead
+        We’re one in a billion but still we’re together
+        By chance or fate.
+
+        I open my eyes and I see you
+        You’re there by my side all along
+        The smile on your face
+        Always tells me love came true (oohhhhhh).
+      `,
+    },
+  ],
+};
+
+      
+      

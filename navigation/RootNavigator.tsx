@@ -12,9 +12,15 @@ import {
 } from "@/services/LocalUserService";
 
 const Stack = createNativeStackNavigator();
+export type RootStackParamList = {
+  Login: undefined;
+  Home: undefined;
+  Participants: undefined;
+  Feedback: undefined;
+};
 
 export default function RootNavigator() {
-  const { user, loading, isParticipant } = useAuth();
+  const { loading } = useAuth();
 
   useEffect(() => {
     clearPlaylistFeedback();
@@ -31,7 +37,12 @@ export default function RootNavigator() {
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {user ? (
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="Home" component={HomeScreen} />
+      <Stack.Screen name="Participants" component={ParticipantsScreen} />
+      <Stack.Screen name="Feedback" component={FeedbackScreen} />
+
+      {/* {user ? (
         isParticipant ? (
           <>
             <Stack.Screen name="Participants" component={ParticipantsScreen} />
@@ -42,7 +53,7 @@ export default function RootNavigator() {
         )
       ) : (
         <Stack.Screen name="Login" component={LoginScreen} />
-      )}
+      )} */}
     </Stack.Navigator>
   );
 }

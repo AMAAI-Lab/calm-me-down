@@ -71,6 +71,7 @@ import LyricAnimator from "@/components/ui/lyric-animator";
 import { formatTime } from "@/util/commonUtils";
 import Biomarkers from "@/components/ui/biomarkers";
 import * as Location from "expo-location";
+import { useNavigation } from "expo-router";
 
 const DEFAULT_DURATION = 150;
 
@@ -78,6 +79,7 @@ export default function HomeScreen() {
   const authContext = useAuth();
   const logout = authContext.logout;
   const user = authContext.user as UserProfile;
+  const navigation = useNavigation();
 
   const [input, setInput] = useState<UserInput>({
     currentMood: "",
@@ -717,6 +719,11 @@ export default function HomeScreen() {
     return { weather, news };
   };
 
+  const handleLogout = () => {
+    logout();
+    navigation.navigate("Login" as never);
+  };
+
   useEffect(() => {
     fetchWeatherAndNews(true);
   }, []);
@@ -1077,7 +1084,7 @@ export default function HomeScreen() {
           />
           <Text style={{ color: "#ece5e5", fontSize: 12 }}>Logout</Text>
           <CommonButton
-            onPress={logout}
+            onPress={handleLogout}
             icon={<FontAwesome5 name="sign-out-alt" size={22} color="#fff" />}
           />
         </View>

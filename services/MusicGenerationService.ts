@@ -3,6 +3,8 @@ import { Alert } from "react-native";
 import {
   CURRENT_LYRICS_PROVIDER,
   CURRENT_SONG_PROVIDER,
+  DEBUG_MODE,
+  JAMENDO_PLAYLIST,
   LYRICS_PROVIDERS,
   LyricsProviderType,
   LyricsResult,
@@ -10,8 +12,10 @@ import {
   SUNO_ORG_PAYLOAD,
 } from "@/constants/appConstants";
 import {
+  getJamendoIdsOfEmotion,
   getPgpIdsOfEmotion,
   getVocalGender,
+  saveJamendoIds,
   savePgpIds,
 } from "./LocalUserService";
 
@@ -853,7 +857,9 @@ async function generateWithMock(
 export async function fetchSavedPlaylistTrack(
   emotion: "calm" | "joyful",
 ): Promise<GeneratedSong> {
-  await new Promise((r) => setTimeout(r, 12 * 1000));
+  if (!DEBUG_MODE) {
+    await new Promise((r) => setTimeout(r, 12_000));
+  }
 
   const playedIds = await getPgpIdsOfEmotion(emotion);
   const commonIds = ["1", "2", "3", "4"];
@@ -868,12 +874,42 @@ export async function fetchSavedPlaylistTrack(
   const index = Number(randomId) - 1 || 0;
   const song = tracks[index];
 
+  const delay = DEBUG_MODE ? 500 : 12_000;
   setTimeout(() => {
     notifyFinalReady(song.id!, song.audioUrl);
-  }, 12000);
+  }, delay);
 
   return song;
 }
+
+export async function fetchJamendoTrack(
+  emotion: "calm" | "joyful",
+): Promise<GeneratedSong> {
+  if (!DEBUG_MODE) {
+    await new Promise((r) => setTimeout(r, 12_000));
+  }
+
+  const playedIds = await getJamendoIdsOfEmotion(emotion);
+  const totalIds = ["1", "2", "3", "4", "5"]
+  const nonPlayedIds = totalIds.filter((id) => !playedIds.includes(id));
+
+  const randomId =
+    nonPlayedIds[Math.floor(Math.random() * nonPlayedIds.length)];
+  await saveJamendoIds(emotion, randomId);
+
+  const tracks = JAMENDO_PLAYLIST[emotion] || [];
+  const index = Number(randomId) - 1 || 0;
+  const song = tracks[index];
+
+  const delay = DEBUG_MODE ? 500 : 12_000;
+  setTimeout(() => {
+    notifyFinalReady(song.id!, song.audioUrl);
+  }, delay);
+
+  return song;
+}
+
+
 
 // =================================================================
 // SHARED HELPER: Download & Save
@@ -902,3 +938,95 @@ export async function downloadAndSaveAudio(
     provider: providerName,
   };
 }
+
+
+// const calculateJamendoTrackScore = (track: any) => {
+//   const stats = track?.stats;
+
+//   if (!stats) return 0;
+
+//   return (
+//     stats.rate_listened_total * 1 +
+//     stats.rate_downloads_total * 2 +
+//     stats.playlisted * 50 +
+//     stats.favorited * 75 +
+//     stats.likes * 100 -
+//     stats.dislikes * 100 +
+//     stats.avgnote * stats.notes * 100
+//   );
+// };
+// export async function fetchJamendoTrack(
+//   tags: string,
+//   index: number,
+//   emotion: "calm" | "joyful",
+// ): Promise<GeneratedSong | null> {
+//   try {
+//     if (!JAMENDO_API_KEY) {
+//       Alert.alert("Config Error", "Missing JAMENDO API KEY");
+//       return null;
+//     }
+
+//     const params = new URLSearchParams({
+//       client_id: JAMENDO_API_KEY,
+//       format: "json",
+//       limit: "20",
+//       lang: "en",
+//       vocalinstrumental: "vocal",
+//       featured: "1",
+//       groupby: "artist_id",
+//       include: "stats",
+//       order: "popularity_total",
+//     });
+
+//     let finalTrack = null;
+//     if (index === 0) {
+//       const commonApiUrl = `https://api.jamendo.com/v3.0/tracks/?${params.toString()}`;
+//       const response = await fetch(`${commonApiUrl}&tags=${tags}`);
+//       const data = await response.json();
+
+//       let tracks = data.results ?? [];
+//       if (!tracks?.length) {
+//         const response2 = await fetch(`${commonApiUrl}&tags=${emotion}`);
+//         const data2 = await response2.json();
+//         tracks = data2.results ?? [];
+//       }
+
+//       if (tracks?.length) {
+//         const rankedTracks = [...tracks]
+//           .sort(
+//             (a, b) =>
+//               calculateJamendoTrackScore(b) - calculateJamendoTrackScore(a),
+//           )
+//           .splice(0, AI_TRAJECTORY_LENGTH);
+//         await saveJamendoTracks(rankedTracks || []);
+//         finalTrack = rankedTracks?.[0] || null;
+//       }
+//     } else {
+//       const jamendoSavedTracks = await getJamendoTracks();
+//       finalTrack = jamendoSavedTracks?.[index] || null;
+//     }
+
+//     if (!finalTrack) {
+//       finalTrack = await fetchSavedPlaylistTrack(emotion);
+//     }
+
+//     const trackId = `${finalTrack?.id || "jamendo"}_${index}`;
+//     const delay = DEBUG_MODE ? 500 : 12_000;
+//     setTimeout(() => {
+//       notifyFinalReady(
+//         trackId,
+//         finalTrack?.audiodownload || finalTrack?.audio || finalTrack?.audioUrl,
+//       );
+//     }, delay);
+
+//     return {
+//       id: trackId,
+//       title: "Your Personal Playlist",
+//       audioUrl: finalTrack?.audio || finalTrack?.audioUrl,
+//       provider: "MOCK",
+//     };
+//   } catch (error) {
+//     console.error("Failed to fetch Jamendo tracks:", error);
+//     return await fetchSavedPlaylistTrack(emotion);
+//   }
+// }

@@ -10,6 +10,7 @@ const TRAJECTORY_ID_KEY = "@trajectory_id";
 const PRE_GEN_PLAYLIST_KEY = "@pre_gen_playlist";
 const VOCAL_GENDER_COUNTS_KEY = "@vocal_gender_counts";
 const APPLE_HEALTH_AUTH_KEY = "@apple_health_authorized";
+const JAMENDO_PLAYLIST_KEY = "@jamendo_playlist";
 
 export interface FeedbackSubmittedStatus {
   pre: boolean;
@@ -190,4 +191,32 @@ export const saveAppleHealthAuthStatus = async (val: boolean) => {
 export const getAppleHealthAuthStatus = async (): Promise<boolean> => {
   const val = await AsyncStorage.getItem(APPLE_HEALTH_AUTH_KEY);
   return val === "true";
+};
+
+// Methods for Jamendo played IDs
+const getJamendoIds = async (): Promise<PgPlaylistEmotionIds> => {
+  const raw = await AsyncStorage.getItem(JAMENDO_PLAYLIST_KEY);
+  return raw ? JSON.parse(raw) : { calm: [], joyful: [] };
+};
+export const saveJamendoIds = async (
+  type: "calm" | "joyful",
+  id: string,
+): Promise<void> => {
+  if (!id) return;
+  const playedIds = await getJamendoIds();
+  const specificEmotionIds = [...playedIds[type], id];
+
+  await AsyncStorage.setItem(
+    JAMENDO_PLAYLIST_KEY,
+    JSON.stringify({ ...playedIds, [type]: [...specificEmotionIds] }),
+  );
+};
+export const getJamendoIdsOfEmotion = async (
+  type: "calm" | "joyful",
+): Promise<string[]> => {
+  const playedIds = await getJamendoIds();
+  return playedIds?.[type] || [];
+};
+export const clearJamendoIds = async () => {
+  await AsyncStorage.removeItem(JAMENDO_PLAYLIST_KEY);
 };

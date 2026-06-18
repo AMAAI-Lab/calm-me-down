@@ -24,16 +24,19 @@ import {
   HealthData,
 } from "@/services/HealthService";
 import {
+  ADD_PROFESSION_TO_PROMPT,
   AI_TRAJECTORY_LENGTH,
   CONTINUOUS_PLAYBACK_MS,
   DEBUG_MODE,
   DEFAULT_HEALTH_DATA,
   HealthProvider,
   LISTEN_BEFORE_GENERATE_MS,
+  NON_AI_PLAYLIST_TYPE,
   SHOW_LYRICS,
 } from "@/constants/appConstants";
 import {
   downloadAndSaveAudio,
+  fetchJamendoTrack,
   fetchSavedPlaylistTrack,
   GeneratedSong,
   generatelyrics,
@@ -41,10 +44,15 @@ import {
   onFinalReady,
 } from "@/services/MusicGenerationService";
 import { formatTime } from "@/util/commonUtils";
-import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
+import {
+  setAudioModeAsync,
+  useAudioPlayer,
+  useAudioPlayerStatus,
+} from "expo-audio";
 import Slider from "@react-native-community/slider";
 import CommonButton from "@/components/ui/common-button";
 import {
+  clearJamendoIds,
   clearPgpIds,
   clearTrackIds,
   clearTrajectoryId,
@@ -83,9 +91,9 @@ import { shareLogs, viewLogs } from "@/services/LoggerService";
 import LoadingPhrases from "@/components/ui/loading-phrases";
 import { buildEmotionPath } from "@/services/EmotionPathService";
 import EmotionGrid from "@/components/ui/emotion-grid";
+import EmotionModal from "@/components/ui/emotion-modal";
 
 type TargetEmotion = "calm" | "joyful";
-type ActivityCtx = "Sitting in Lab" | "Walking Outside";
 type PlaylistType = "Trajectory" | "SavedPlaylist";
 type PlaylistId = "A" | "B" | "C" | "D";
 type Phase = "setup" | "running" | "complete";
@@ -93,10 +101,9 @@ type Phase = "setup" | "running" | "complete";
 interface PlaylistDef {
   targetEmotion: TargetEmotion;
   playlistType: PlaylistType;
-  context: ActivityCtx;
 }
 
-const ACTIVITY_SEQUENCE: ActivityCtx[] = [
+const ACTIVITY_SEQUENCE: string[] = [
   "Sitting in Lab",
   "Sitting in Lab",
   "Walking Outside",
@@ -115,52 +122,42 @@ const C = {
 const PLAYLIST_DEFS: Record<PlaylistId, PlaylistDef> = {
   A: {
     targetEmotion: "calm",
-    playlistType: "Trajectory",
-    context: "Sitting in Lab",
+    playlistType: "SavedPlaylist",
   },
   B: {
     targetEmotion: "joyful",
     playlistType: "Trajectory",
-    context: "Walking Outside",
   },
   C: {
-    targetEmotion: "calm",
-    playlistType: "SavedPlaylist",
-    context: "Walking Outside",
-  },
-  D: {
     targetEmotion: "joyful",
     playlistType: "SavedPlaylist",
-    context: "Sitting in Lab",
+  },
+  D: {
+    targetEmotion: "calm",
+    playlistType: "Trajectory",
   },
 };
 
 const SEQUENCES: Record<TargetEmotion, [PlaylistId[], PlaylistId[]]> = {
   calm: [
     ["A", "B", "C", "D"],
-    ["C", "D", "A", "B"],
+    ["D", "C", "B", "A"],
   ],
   joyful: [
-    ["B", "C", "D", "A"],
-    ["D", "A", "B", "C"],
+    ["C", "D", "A", "B"],
+    ["B", "A", "D", "C"],
   ],
 };
 
 const DEFAULT_DURATION = 120;
 
-function pickSequence(target: TargetEmotion, activity: string): PlaylistId[] {
-  let playlistId = null;
-  Object.entries(PLAYLIST_DEFS).forEach(([id, def]) => {
-    if (def.targetEmotion === target && def.context === activity) {
-      playlistId = id;
-    }
-  });
-
-  const [s1, s2] = SEQUENCES[target];
-  if (playlistId) {
-    return s1[0] === playlistId ? s1 : s2;
+function pickSequence(target: TargetEmotion): PlaylistId[] {
+  let randomIndex = Math.random() < 0.5 ? 0 : 1;
+  if (DEBUG_MODE) {
+    randomIndex = 0;
   }
-  return (Math.random() < 0.5 ? s1 : s2) as PlaylistId[];
+
+  return SEQUENCES[target][randomIndex];
 }
 
 export default function ParticipantsScreen() {
@@ -179,6 +176,8 @@ export default function ParticipantsScreen() {
   const [healthProvider, setHealthProvider] =
     useState<HealthProvider>("Apple Health");
 
+  const [isPreFeedbackMessage, setIsPreFeedbackMessage] = useState(true);
+  const [showEmotionModal, setShowEmotionModal] = useState(false);
   const [songJustFinished, setSongJustFinished] = useState(false);
   const [nextSongLoading, setNextSongLoading] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -285,6 +284,7 @@ export default function ParticipantsScreen() {
     nextSongLoading ||
     (songQueue.length > 0 && (!currPlaylistFinished || !ratingDone));
   const currentActivity = ACTIVITY_SEQUENCE?.[playlistIdx] || "Sitting in Lab";
+  const isPreGen = NON_AI_PLAYLIST_TYPE === "PRE_GEN";
 
   const clearStates = async () => {
     setSongQueue([]);
@@ -299,36 +299,42 @@ export default function ParticipantsScreen() {
     await clearTrackIds();
     await clearPgpIds();
     await clearVocalGenderCounts();
+    await clearJamendoIds();
   };
 
   const fetchWeatherAndNews = async (
     firstCall: boolean = false,
   ): Promise<{ weather: WeatherData | null; news: NewsData | null } | null> => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") return null;
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") return null;
 
-    let loc = await Location.getCurrentPositionAsync({});
-    if (firstCall) console.log("location set");
+      let loc = await Location.getCurrentPositionAsync({});
+      if (firstCall) console.log("location set");
 
-    let weather = weatherData;
-    if (!weather) {
-      weather = await fetchWeatherData(
-        loc.coords.latitude,
-        loc.coords.longitude,
-      );
-      setWeatherData(weather);
+      let weather = weatherData;
+      if (!weather) {
+        weather = await fetchWeatherData(
+          loc.coords.latitude,
+          loc.coords.longitude,
+        );
+        setWeatherData(weather);
+      }
+
+      let news = null;
+      news = await fetchUniqueNewsData(weather?.city);
+
+      // If news data isn't available for a particular country-code, then try 'US' as fallback
+      if (!news) {
+        news = await fetchUniqueNewsData("us");
+      }
+      setNewsData(news);
+
+      return { weather, news };
+    } catch (err: any) {
+      console.warn("Error while fetching weather and news: ", err?.message);
+      return null;
     }
-
-    let news = null;
-    news = await fetchUniqueNewsData(weather?.city);
-
-    // If news data isn't available for a particular country-code, then try 'US' as fallback
-    if (!news) {
-      news = await fetchUniqueNewsData("us");
-    }
-    setNewsData(news);
-
-    return { weather, news };
   };
 
   const buildLyricsPrompt = async (mood: string, healthData: HealthData) => {
@@ -336,6 +342,9 @@ export default function ParticipantsScreen() {
     const isStepsValid = !!healthData.steps;
 
     const { weather, news } = (await fetchWeatherAndNews()) || {};
+    const addProfession = ADD_PROFESSION_TO_PROMPT && !!user?.profession;
+    const activityContext =
+      currentActivity === "Walking Outside" ? "Walking" : "Sitting";
 
     const prompt = `
       You are a creative songwriter. Generate original song lyrics personalized to the following inputs:
@@ -343,6 +352,7 @@ export default function ParticipantsScreen() {
       USER
       - Name: ${user?.nickName || "Spark"}
       - Age: ${user?.age}
+      ${addProfession ? `- Profession: ${user.profession}` : ""}
 
       MUSIC STYLE
       - Genre preference: ${user?.favoriteGenre}
@@ -352,7 +362,7 @@ export default function ParticipantsScreen() {
       PHYSICAL CONTEXT
       ${isHrValid ? `- Heart rate in last 5 min: ${healthData.heartRate} bpm` : ""}
       ${isStepsValid ? `- Movement in last 5 min: ${healthData.steps} steps` : ""}
-      - Current or upcoming activity: ${currentActivity || "None specified"}
+      - Current or upcoming activity: ${activityContext}
 
       ENVIRONMENT
       - Location: ${weather?.city || "Unknown"}
@@ -368,7 +378,8 @@ export default function ParticipantsScreen() {
       5. Integration: Integrate physical state, environment, and (if relevant) the news mood subtly and metaphorically
       6. Originality: Avoid clichés and generic motivational phrases.
       7. Style: Use the genre and stylistic influence only for rhythm, imagery, and tone guidance—do not imitate or quote them.
-      8. Before writing the lyrics, internally consider how the song should feel in terms of emotion, genre, and tempo/beat (e.g., slow emotional, mid-tempo groovy, fast energetic), and reflect that naturally in rhythm, wording, and flow of the lyrics. Do NOT explicitly mention tempo or BPM in the lyrics.
+      ${addProfession ? `8. If profession information is available, subtly reflect experiences, aspirations, or everyday moments associated with that profession. Keep references natural and poetic rather than explicitly stating the profession.` : ``}
+      ${addProfession ? `9` : `8`}. Before writing the lyrics, internally consider how the song should feel in terms of emotion, genre, and tempo/beat (e.g., slow emotional, mid-tempo groovy, fast energetic), and reflect that naturally in rhythm, wording, and flow of the lyrics. Do NOT explicitly mention tempo or BPM in the lyrics.
 
       MUSIC STYLE STRING:
       Based on the mood, heart rate, steps and activity, generate a short Suno-style music style descriptor (max 12 words). It should describe genre, tempo feel, and sonic texture.
@@ -532,20 +543,29 @@ export default function ParticipantsScreen() {
     nextPlaylistIdx: number = 0,
   ) => {
     await clearStates();
-    await fetchWeatherAndNews();
+    if (!DEBUG_MODE) {
+      await fetchWeatherAndNews();
+    }
 
     setPlaylistType("SavedPlaylist");
-    const track = await fetchSavedPlaylistTrack(
-      (givenTargetEmotion || targetEmotion) === "calm" ? "calm" : "joyful",
-    );
+    const currTrajectory = generateTrajectory(givenTargetEmotion);
+    setEmotionTrajectory(currTrajectory);
+
+    let track = null;
+    const targetEmotionArg =
+      (givenTargetEmotion || targetEmotion) === "calm" ? "calm" : "joyful";
+    if (isPreGen) {
+      track = await fetchSavedPlaylistTrack(targetEmotionArg);
+    } else {
+      track = await fetchJamendoTrack(targetEmotionArg);
+    }
+
     if (!track) {
       return;
     }
-
     setLyricsQueue([track?.lyrics || ""]);
+
     setSongQueue([track]);
-    const currTrajectory = generateTrajectory(givenTargetEmotion);
-    setEmotionTrajectory(currTrajectory);
 
     try {
       const feedbackData = await getPlaylistFeedback();
@@ -555,7 +575,7 @@ export default function ParticipantsScreen() {
         sessionId,
         {
           emotionTrajectory: currTrajectory,
-          playlistType: "savedPlaylist",
+          playlistType: isPreGen ? "savedPlaylist" : "jamendoPlaylist",
           trajectoryNumber: nextPlaylistIdx + 1,
           feedbackBefore: { ...feedbackData, emotionState: startEmotion },
         },
@@ -589,7 +609,7 @@ export default function ParticipantsScreen() {
 
     try {
       if (!startEmotion || !targetEmotion) return;
-      const seq = pickSequence(targetEmotion, currentActivity);
+      const seq = pickSequence(targetEmotion);
       setSequence(seq);
 
       const newSessionID = await createMusicSession(
@@ -645,20 +665,38 @@ export default function ParticipantsScreen() {
     setLoading(false);
   };
 
-  const handleNextSong = () => {
+  const resetSlider = async () => {
+    await new Promise((r) => setTimeout(r, 100));
+    await player.seekTo(0);
+    setSliderValue(0);
+  };
+
+  const handleNextSong = async () => {
     if (currentSongIndex === songQueue.length - 1 || !ratingDone) return;
     setCurrentSongIndex((i) => i + 1);
+    await resetSlider();
+  };
+
+  const playAudioPlayer = () => {
+    player.setActiveForLockScreen(true, {
+      title: currentSong?.title || "Emotion App song",
+      artist: user?.nickName || "Emotion App",
+      albumTitle: `Playlist ${playlistIdx + 1}`,
+    });
+
+    player.play();
+
+    if (Math.floor(currentTime) === Math.floor(duration)) {
+      handleNextSong();
+    }
   };
 
   const playSound = () => {
     if (playerStatus.playing) {
       player.pause();
+      player.setActiveForLockScreen(false);
     } else {
-      player.play();
-
-      if (Math.floor(currentTime) === Math.floor(duration)) {
-        handleNextSong();
-      }
+      playAudioPlayer();
     }
   };
   const handleSlidingComplete = async (value: number) => {
@@ -791,13 +829,21 @@ export default function ParticipantsScreen() {
       return;
     }
 
-    await fetchWeatherAndNews();
-    const track = await fetchSavedPlaylistTrack(targetEmotion || "calm");
+    if (!DEBUG_MODE) {
+      await fetchWeatherAndNews();
+    }
+
+    let track = null;
+    if (isPreGen) {
+      track = await fetchSavedPlaylistTrack(targetEmotion || "calm");
+    } else {
+      track = await fetchJamendoTrack(targetEmotion || "calm");
+    }
+
     if (!track) {
       setNextSongLoading(false);
       return;
     }
-
     setLyricsQueue((prev) => [...prev, track?.lyrics || ""]);
     setSongQueue((prev) => [...prev, track]);
 
@@ -878,6 +924,19 @@ export default function ParticipantsScreen() {
     } as never);
   };
 
+  const showModalIfBothFeedbackCaptured = (
+    feedbackSubmittedVal: any = null,
+  ) => {
+    if (
+      !allPlaylistsCompleted &&
+      emotionCaptured?.[playlistIdx]?.post &&
+      (feedbackSubmittedVal || feedbackSubmitted)?.[playlistIdx]?.post
+    ) {
+      setShowEmotionModal(true);
+      setIsPreFeedbackMessage(true);
+    }
+  };
+
   const handleStartEmotion = async (emotion: string) => {
     setStartEmotion(emotion);
 
@@ -921,6 +980,7 @@ export default function ParticipantsScreen() {
     }));
 
     if (type === "post" && !bothCaptured) {
+      showModalIfBothFeedbackCaptured();
       const feedbackData = await getPlaylistFeedback();
       const sessionId = await getSessionId();
       const trajectoryId = await getTrajectoryId();
@@ -931,9 +991,24 @@ export default function ParticipantsScreen() {
     }
   };
 
+  const handleLogout = () => {
+    logout();
+    navigation.navigate("Login" as never);
+  };
+
   // Fetch news and weather info
   useEffect(() => {
     fetchWeatherAndNews(true);
+
+    setTimeout(() => {
+      setShowEmotionModal(true);
+    }, 2000);
+
+    setAudioModeAsync({
+      playsInSilentMode: true, // iOS: play even when muted
+      shouldPlayInBackground: true, // iOS + Android: keep going when backgrounded
+      interruptionMode: "doNotMix", // pause when phone call starts
+    });
   }, []);
 
   // Update listening time of user for current song
@@ -986,7 +1061,7 @@ export default function ParticipantsScreen() {
     });
 
     if (!currentSong) return;
-    player.play();
+    playAudioPlayer();
   }, [currentSong?.audioUrl]);
 
   // Plays next song once current one finishes
@@ -998,6 +1073,12 @@ export default function ParticipantsScreen() {
         setRatingUnlocked(true);
         setShowRatingAlert(true);
       }
+
+      if (index === emotionTrajectory.length - 1) {
+        setShowEmotionModal(true);
+        setIsPreFeedbackMessage(false);
+      }
+
       updateTrackInDB(
         {
           completed: true,
@@ -1042,7 +1123,9 @@ export default function ParticipantsScreen() {
     }, LISTEN_BEFORE_GENERATE_MS);
 
     setTimeout(() => {
-      setRatingUnlocked(true);
+      if (songRatings[currentSongIndex] === undefined) {
+        setRatingUnlocked(true);
+      }
     }, 10_000);
 
     return () => {
@@ -1055,6 +1138,7 @@ export default function ParticipantsScreen() {
     setGenerationLockedForIndex(null);
     setRatingUnlocked(false);
     setSongJustFinished(false);
+    resetSlider();
   }, [currentSongIndex]);
 
   // Download finalURL song when it's ready
@@ -1079,7 +1163,7 @@ export default function ParticipantsScreen() {
         player.replace(localUri);
         await new Promise((r) => setTimeout(r, 500));
         await player.seekTo(player?.currentTime || prevTime);
-        player.play();
+        playAudioPlayer();
       } else {
         setSongQueue((prev) => {
           const updated = [...prev];
@@ -1154,8 +1238,16 @@ export default function ParticipantsScreen() {
   // Unlocks start next playlist button once user has given a feedback
   useFocusEffect(
     useCallback(() => {
+      const prevVal = { ...feedbackSubmitted };
+
       getFeedbackSubmitted().then((val) => {
         setFeedbackSubmitted(val);
+
+        if (!prevVal?.[playlistIdx]?.post) {
+          setTimeout(() => {
+            showModalIfBothFeedbackCaptured(val);
+          }, 3000);
+        }
       });
     }, []),
   );
@@ -1562,7 +1654,7 @@ export default function ParticipantsScreen() {
       )}
 
       {/* All playlists completed Message */}
-      {allPlaylistsCompleted && (
+      {allPlaylistsCompleted && ratingDone && (
         <View style={[styles.section]}>
           <View style={styles.sectionHead}>
             <Text style={styles.sectionTitle}>
@@ -1572,6 +1664,14 @@ export default function ParticipantsScreen() {
         </View>
       )}
 
+      {/* Emotion Modal */}
+      <EmotionModal
+        visible={showEmotionModal}
+        heading="How do you feel right now?"
+        subheading={`Please update your emotion state and mood meter ${isPreFeedbackMessage ? "before starting the new playlist." : "after listening to this playlist."}`}
+        onClose={() => setShowEmotionModal(false)}
+      />
+
       {/* Logout button */}
       <View
         style={[styles.sectionHead, { gap: 0, marginTop: 60, opacity: 0.5 }]}
@@ -1580,7 +1680,7 @@ export default function ParticipantsScreen() {
           Logout
         </Text>
         <CommonButton
-          onPress={logout}
+          onPress={handleLogout}
           icon={<FontAwesome5 name="sign-out-alt" size={22} color="#fff" />}
         />
       </View>

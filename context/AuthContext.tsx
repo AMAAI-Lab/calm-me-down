@@ -8,7 +8,7 @@ type AuthContextType = {
   user: UserProfile | null;
   loading: boolean;
   isParticipant: boolean;
-  login: (user: UserProfile) => Promise<void>;
+  login: (user: UserProfile) => Promise<boolean>;
   logout: () => Promise<void>;
 };
 
@@ -25,18 +25,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUser(storedUser);
       setLoading(false);
 
-      const isParticipantEmail = checkForParticipantEmail(storedUser?.email || "");
+      const isParticipantEmail = checkForParticipantEmail(
+        storedUser?.email || "",
+      );
       setIsParticipant(isParticipantEmail);
     })();
   }, []);
 
-  const login = async (userData: UserProfile) => {
+  const login = async (userData: UserProfile) : Promise<boolean> => {
     await saveUserInDB(userData);
     await saveUserLocal(userData);
     setUser(userData);
 
     const isParticipantEmail = checkForParticipantEmail(userData?.email || "");
     setIsParticipant(isParticipantEmail);
+
+    return isParticipantEmail
   };
 
   const logout = async () => {

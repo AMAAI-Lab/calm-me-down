@@ -17,9 +17,14 @@ import {
   UserProfile,
 } from "@/constants/appConstants";
 import EmotionDropdown from "@/components/ui/emotion-dropdown";
+import { useNavigation } from "expo-router";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { RootStackParamList } from "@/navigation/RootNavigator";
 
 export default function LoginScreen() {
   const { login } = useAuth();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [form, setForm] = useState<UserProfile>({
     nickName: "",
@@ -72,7 +77,7 @@ export default function LoginScreen() {
       required: true,
       validate: (v) => {
         if (v.trim().length < 1) {
-          return "Please enter your profession.";
+          return "Please select your profession.";
         }
         return undefined;
       },
@@ -179,8 +184,13 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      await login(form);
-      // navigation handled automatically by RootNavigator
+      const isParticipant = await login(form);
+
+      if (isParticipant) {
+        navigation.replace("Participants");
+      } else {
+        navigation.replace("Home");
+      }
     } catch (err: any) {
       Alert.alert("Login failed", "Please try again.");
       console.error("Error while loggin in: ", err?.message);
@@ -194,7 +204,7 @@ export default function LoginScreen() {
       favoriteGenre: "Pop, Indie",
       favoriteBand: "Dua Lipa, The Weeknd",
       nickName: "Mike",
-      profession: "Student"
+      profession: "Student",
     };
 
     if (isP) {

@@ -53,8 +53,8 @@ function VASlider({
             vaStyles.bubble,
             {
               left: bubbleLeft,
-              backgroundColor: isSet ? "#C4417A" : "#1E1535",
-              borderColor: isSet ? "#C4417A" : "#2A1F40",
+              backgroundColor: isSet ? "#C4417A" : "#2E2350",
+              borderColor: isSet ? "#C4417A" : "#4A3870",
               opacity: isSet ? 1 : 0.4,
             },
           ]}
@@ -75,9 +75,9 @@ function VASlider({
         step={1}
         value={isSet ? value : 1}
         onValueChange={(v) => onChange(Math.round(v))}
-        minimumTrackTintColor={isSet ? "#C4417A" : "#2A1F40"}
-        maximumTrackTintColor="#1E1535"
-        thumbTintColor={isSet ? "#C4417A" : "#2A1F40"}
+        minimumTrackTintColor={isSet ? "#C4417A" : "#4A3870"}
+        maximumTrackTintColor="#4A3870"
+        thumbTintColor={isSet ? "#C4417A" : "#4A3870"}
       />
 
       {/* Axis labels */}
@@ -427,7 +427,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: "#120C22",
     borderWidth: 1,
-    borderColor: "#1E1535",
+    borderColor: "#2E2350",
     borderRadius: 20,
     padding: 20,
     marginBottom: 14,
@@ -538,7 +538,7 @@ const styles = StyleSheet.create({
   },
   dualDivider: {
     height: 1,
-    backgroundColor: "#1E1535",
+    backgroundColor: "#2E2350",
     marginVertical: 4,
   },
 });
