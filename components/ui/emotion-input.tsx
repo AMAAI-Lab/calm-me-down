@@ -8,6 +8,7 @@ export default function EmotionInput({
   value,
   hint,
   error,
+  numberOfLines = 1,
   onChange,
 }: {
   label: string;
@@ -16,6 +17,7 @@ export default function EmotionInput({
   value: string;
   hint?: string;
   error?: string;
+  numberOfLines?: number;
   onChange: (t: string) => void;
 }) {
   return (
@@ -29,6 +31,8 @@ export default function EmotionInput({
           style={styles.emotionTextInput}
           value={value}
           onChangeText={onChange}
+          multiline={numberOfLines > 1}
+          numberOfLines={numberOfLines}
         />
       </View>
 

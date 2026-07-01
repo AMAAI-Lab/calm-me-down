@@ -12,6 +12,7 @@ import { FontAwesome5 } from "@expo/vector-icons";
 import EmotionInput from "../components/ui/emotion-input";
 import { useAuth } from "../context/AuthContext";
 import {
+  APP_VERSION,
   ARTISTS_BY_GENRE,
   GENRES,
   UserProfile,
@@ -33,6 +34,7 @@ export default function LoginScreen() {
     favoriteGenre: "",
     favoriteBand: "",
     profession: "",
+    about: "",
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<
@@ -83,6 +85,9 @@ export default function LoginScreen() {
       },
     },
     nickName: {
+      required: false,
+    },
+    about: {
       required: false,
     },
     favoriteGenre: {
@@ -204,18 +209,19 @@ export default function LoginScreen() {
       favoriteGenre: "Pop, Indie",
       favoriteBand: "Dua Lipa, The Weeknd",
       nickName: "Mike",
+      about: "I love late night drives, rainy days and indie films",
       profession: "Student",
     };
 
     if (isP) {
       setForm({
         ...form,
-        email: "p10@gmail.com",
+        email: "p37@gmail.com",
       });
     } else {
       setForm({
         ...form,
-        email: "mike@gmail.com",
+        email: "mike-test@gmail.com",
       });
     }
 
@@ -273,6 +279,16 @@ export default function LoginScreen() {
         error={touched.email ? errors.email : undefined}
       />
 
+      <EmotionInput
+        label="About you (optional)"
+        placeholder="e.g. I love late night drives, rainy days and indie films..."
+        icon={<FontAwesome5 name="feather-alt" size={16} color="#fff" />}
+        value={form?.about || ''}
+        onChange={(t) => handleChange("about", t)}
+        hint="A line about yourself helps personalize your lyrics."
+        numberOfLines={5}
+      />
+
       <EmotionDropdown
         label="Favorite genre"
         placeholder="Select a genre"
@@ -321,6 +337,22 @@ export default function LoginScreen() {
           </Pressable>
         </View>
       )}
+
+      {/* App version */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 10,
+          marginTop: 60,
+          opacity: 0.8,
+          marginLeft: 10,
+        }}
+      >
+        <Text style={{ color: "#ece5e5", fontSize: 12 }}>
+          App version: {APP_VERSION}
+        </Text>
+      </View>
     </ScrollView>
   );
 }

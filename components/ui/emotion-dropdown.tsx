@@ -158,7 +158,6 @@ export default function EmotionDropdown({
               <View style={styles.input}>
                 <FontAwesome5 name="search" size={16} color="#fff" />
                 <TextInput
-                  autoFocus
                   placeholder="Search..."
                   placeholderTextColor="#fff"
                   style={styles.placeholder}

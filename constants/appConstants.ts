@@ -25,6 +25,7 @@ export type UserProfile = {
   name?: string;
   nickName?: string;
   profession?: string;
+  about?: string;
   age: string;
   email: string;
   favoriteGenre: string;
@@ -36,6 +37,7 @@ export interface LyricsResult {
   musicStyle: string;
 }
 
+export const APP_VERSION = 13
 export const DEBUG_MODE = false;
 export const LISTEN_BEFORE_GENERATE_MS = 2000;
 export const CONTINUOUS_PLAYBACK_MS = 5000;
@@ -967,6 +969,8 @@ export const PRE_GENERATED_PLAYLIST = {
 export const AI_TRAJECTORY_LENGTH = 4;
 
 export const ADD_PROFESSION_TO_PROMPT = false;
+export const ADD_ABOUT_TO_PROMPT = true;
+export const REPETITIVE_CHECK_IN_PROMPT = true;
 
 export const NON_AI_PLAYLIST_TYPE: "PRE_GEN" | "JAMENDO" = "JAMENDO";
 

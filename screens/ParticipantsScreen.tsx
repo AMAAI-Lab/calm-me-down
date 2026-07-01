@@ -24,14 +24,17 @@ import {
   HealthData,
 } from "@/services/HealthService";
 import {
+  ADD_ABOUT_TO_PROMPT,
   ADD_PROFESSION_TO_PROMPT,
   AI_TRAJECTORY_LENGTH,
+  APP_VERSION,
   CONTINUOUS_PLAYBACK_MS,
   DEBUG_MODE,
   DEFAULT_HEALTH_DATA,
   HealthProvider,
   LISTEN_BEFORE_GENERATE_MS,
   NON_AI_PLAYLIST_TYPE,
+  REPETITIVE_CHECK_IN_PROMPT,
   SHOW_LYRICS,
 } from "@/constants/appConstants";
 import {
@@ -345,7 +348,51 @@ export default function ParticipantsScreen() {
     const addProfession = ADD_PROFESSION_TO_PROMPT && !!user?.profession;
     const activityContext =
       currentActivity === "Walking Outside" ? "Walking" : "Sitting";
+    const about = ADD_ABOUT_TO_PROMPT && user?.about?.trim();
 
+    const preventRepetition = REPETITIVE_CHECK_IN_PROMPT
+    const repetitionRules = `
+      PERSONALIZATION STRATEGY (IMPORTANT)
+      Do not try to include every user input in the lyrics.
+
+      Before writing, internally select only 2–4 meaningful elements from the available personal context.
+
+      Choose elements that create the strongest emotional story:
+      - About details (interests, memories, personality, preferences)
+      - Profession experiences or routines
+      - Activity/movement state
+      - Weather/environment
+      - Location atmosphere
+      - Mood
+      - Music style influence
+      - Physical state
+
+      Treat the remaining inputs as background context only.
+
+      Each song should have a different personalization focus.
+      Do not repeatedly use the same type of details across songs.
+
+      Example:
+      One song may focus on a personal memory + weather.
+      Another may focus on daily routine + profession.
+      Another may focus on movement + inner emotion.
+
+      The goal is a unique emotional story, not a summary of the user's data.      
+    `
+    const originalityRules = `
+      6. ORIGINALITY and LYRIC VARIATION RULES:
+      - Avoid repeating phrases, metaphors, sentence patterns, and imagery from previous songs.
+      - Do not default to common AI lyric imagery.
+      - Prefer specific and unexpected details over generic emotional descriptions.
+      - Create a new setting, perspective, and emotional angle for each song.
+
+      Avoid overused imagery such as:
+      ceiling fans, fluorescent lights, city lights, lonely streets,
+      empty roads, rain on windows, coffee cups, shadows,
+      heartbeat drums, echoes, midnight trains, neon lights.
+
+      Use different vocabulary, environments, and metaphors each time.
+    `
     const prompt = `
       You are a creative songwriter. Generate original song lyrics personalized to the following inputs:
 
@@ -353,6 +400,7 @@ export default function ParticipantsScreen() {
       - Name: ${user?.nickName || "Spark"}
       - Age: ${user?.age}
       ${addProfession ? `- Profession: ${user.profession}` : ""}
+      ${about ? `- About: ${about}` : ""}
 
       MUSIC STYLE
       - Genre preference: ${user?.favoriteGenre}
@@ -369,17 +417,29 @@ export default function ParticipantsScreen() {
       - Weather: ${weather?.temperature ? `${weather.temperature}°C, ${weather.description}` : "Unknown"}
       - News mood cue (optional): ${news?.headline || "N/A"}
 
+      ${preventRepetition ? `${repetitionRules}` : ""}
+
       TASK:
       Write cohesive song lyrics.
       1. Structure: Verse 1, Chorus, Verse 2, and Outro.
       2. Line count (STRICT): Verse = 4 lines, Chorus = 4 lines, Outro = 2 lines. Total: 14 lines.
       3. Line length: Each line must be 6–10 words. No long run-on lines.
       4. Tone: ${mood} and emotionally grounded.
+      ${preventRepetition ? `
+      5. Integration:
+      - Use selected personal/context elements naturally.
+      - Do not force every input into the lyrics.
+      - Physical state, environment, and news mood should only appear if they strengthen the emotional story.
+      ` : `
       5. Integration: Integrate physical state, environment, and (if relevant) the news mood subtly and metaphorically
+      `}
+      ${preventRepetition ? `${originalityRules}` : `
       6. Originality: Avoid clichés and generic motivational phrases.
+      `}
       7. Style: Use the genre and stylistic influence only for rhythm, imagery, and tone guidance—do not imitate or quote them.
-      ${addProfession ? `8. If profession information is available, subtly reflect experiences, aspirations, or everyday moments associated with that profession. Keep references natural and poetic rather than explicitly stating the profession.` : ``}
-      ${addProfession ? `9` : `8`}. Before writing the lyrics, internally consider how the song should feel in terms of emotion, genre, and tempo/beat (e.g., slow emotional, mid-tempo groovy, fast energetic), and reflect that naturally in rhythm, wording, and flow of the lyrics. Do NOT explicitly mention tempo or BPM in the lyrics.
+      8. If an "About" detail is provided, subtly personalize the lyrics using relevant memories, interests, preferences, or life details. Keep it natural and poetic rather than directly repeating the text.
+      ${addProfession ? `9. If profession information is available, subtly reflect experiences, aspirations, or everyday moments associated with that profession. Keep references natural and poetic rather than explicitly stating the profession.` : ``}
+      ${addProfession ? `10` : `9`}. Before writing the lyrics, internally consider how the song should feel in terms of emotion, genre, and tempo/beat (e.g., slow emotional, mid-tempo groovy, fast energetic), and reflect that naturally in rhythm, wording, and flow of the lyrics. Do NOT explicitly mention tempo or BPM in the lyrics.
 
       MUSIC STYLE STRING:
       Based on the mood, heart rate, steps and activity, generate a short Suno-style music style descriptor (max 12 words). It should describe genre, tempo feel, and sonic texture.
@@ -1737,6 +1797,15 @@ export default function ParticipantsScreen() {
           </Text>
         </Pressable>
       )}
+
+      {/* App version */}
+      <View
+        style={[styles.sectionHead, { gap: 0, marginTop: 60, opacity: 0.8 }]}
+      >
+        <Text style={{ color: "#ece5e5", fontSize: 12, marginLeft: 20 }}>
+          App version: {APP_VERSION}
+        </Text>
+      </View>
     </ScrollView>
   );
 }
