@@ -5,8 +5,8 @@ import { FontAwesome5 } from "@expo/vector-icons";
 const C = {
   surface: "#16161F",
   border: "#2A2A3A",
-  calm: "#4A9EFF",
-  calmDim: "#0E2540",
+  relaxed: "#4A9EFF",
+  relaxedDim: "#0E2540",
   joyful: "#FFB830",
   joyfulDim: "#3A2900",
   textMuted: "#7070A0",
@@ -19,14 +19,14 @@ export default function MoodCard({
   locked,
   onPress,
 }: {
-  mood: "calm" | "joyful";
+  mood: "relaxed" | "joyful";
   selected: boolean;
   locked: boolean;
   onPress: () => void;
 }) {
-  const isCalm = mood === "calm";
-  const color = isCalm ? C.calm : C.joyful;
-  const dimBg = isCalm ? C.calmDim : C.joyfulDim;
+  const isRelaxed = mood === "relaxed";
+  const color = isRelaxed ? C.relaxed : C.joyful;
+  const dimBg = isRelaxed ? C.relaxedDim : C.joyfulDim;
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePress = () => {
@@ -60,13 +60,12 @@ export default function MoodCard({
           <View style={[styles.moodGlow, { backgroundColor: color }]} />
         )}
 
-        <Text style={styles.moodEmoji}>{isCalm ? "🌊" : "☀️"}</Text>
+        <Text style={styles.moodEmoji}>{isRelaxed ? "🌊" : "☀️"}</Text>
         <Text
           style={[styles.moodTitle, { color: selected ? color : C.textMuted }]}
         >
-          {isCalm ? "Calm" : "Joyful"}
+          {isRelaxed ? "Relaxed" : "Joyful"}
         </Text>
-        {/* <Text style={styles.moodArrow}>→ {isCalm ? "Joyful" : "Calm"}</Text> */}
 
         {selected && (
           <View style={[styles.moodCheckBadge, { backgroundColor: color }]}>

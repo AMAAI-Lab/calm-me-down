@@ -18,7 +18,7 @@ export interface FeedbackSubmittedStatus {
 }
 
 interface PgPlaylistEmotionIds {
-  calm: string[];
+  relaxed: string[];
   joyful: string[];
 }
 
@@ -126,10 +126,10 @@ export const clearPlaylistFeedback = async () => {
 // Methods for mutating already played pre generated playlist songs IDs
 const getPgpIds = async (): Promise<PgPlaylistEmotionIds> => {
   const raw = await AsyncStorage.getItem(PRE_GEN_PLAYLIST_KEY);
-  return raw ? JSON.parse(raw) : { calm: [], joyful: [] };
+  return raw ? JSON.parse(raw) : { relaxed: [], joyful: [] };
 };
 export const savePgpIds = async (
-  type: "calm" | "joyful",
+  type: "relaxed" | "joyful",
   id: string,
 ): Promise<void> => {
   if (!id) return;
@@ -142,7 +142,7 @@ export const savePgpIds = async (
   );
 };
 export const getPgpIdsOfEmotion = async (
-  type: "calm" | "joyful",
+  type: "relaxed" | "joyful",
 ): Promise<string[]> => {
   const playedIds = await getPgpIds();
   return playedIds?.[type] || [];
@@ -188,10 +188,10 @@ export const getAppleHealthAuthStatus = async (): Promise<boolean> => {
 // Methods for Jamendo played IDs
 const getJamendoIds = async (): Promise<PgPlaylistEmotionIds> => {
   const raw = await AsyncStorage.getItem(JAMENDO_PLAYLIST_KEY);
-  return raw ? JSON.parse(raw) : { calm: [], joyful: [] };
+  return raw ? JSON.parse(raw) : { relaxed: [], joyful: [] };
 };
 export const saveJamendoIds = async (
-  type: "calm" | "joyful",
+  type: "relaxed" | "joyful",
   id: string,
 ): Promise<void> => {
   if (!id) return;
@@ -204,7 +204,7 @@ export const saveJamendoIds = async (
   );
 };
 export const getJamendoIdsOfEmotion = async (
-  type: "calm" | "joyful",
+  type: "relaxed" | "joyful",
 ): Promise<string[]> => {
   const playedIds = await getJamendoIds();
   return playedIds?.[type] || [];

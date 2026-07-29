@@ -516,7 +516,7 @@ export const ARTISTS_BY_GENRE: Record<string, string[]> = {
 export const SHOW_LYRICS = true;
 
 export const EMOTION_TEMPO_MAP = {
-  calm: [60, 75],
+  relaxed: [60, 75],
   comforting: [70, 90],
   hopeful: [85, 110],
   joyful: [105, 135],
@@ -530,7 +530,7 @@ export const EMOTION_GRID: string[][] = [
 ];
 
 export const PRE_GENERATED_PLAYLIST = {
-  calm: [
+  relaxed: [
     {
       id: "1",
       // title: "Tate McRae, Jeremy Zucker - that way",
@@ -1011,7 +1011,7 @@ export const REPETITIVE_CHECK_IN_PROMPT = true;
 export const NON_AI_PLAYLIST_TYPE: "PRE_GEN" | "JAMENDO" = "JAMENDO";
 
 export const JAMENDO_PLAYLIST = {
-  calm: [
+  relaxed: [
     {
       id: "1",
       // title: "Horizons - Train Room",

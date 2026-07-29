@@ -96,7 +96,7 @@ import { buildEmotionPath } from "@/services/EmotionPathService";
 import EmotionGrid from "@/components/ui/emotion-grid";
 import EmotionModal from "@/components/ui/emotion-modal";
 
-type TargetEmotion = "calm" | "joyful";
+type TargetEmotion = "relaxed" | "joyful";
 type PlaylistType = "Trajectory" | "SavedPlaylist";
 type PlaylistId = "A" | "B" | "C" | "D";
 type Phase = "setup" | "running" | "complete";
@@ -124,7 +124,7 @@ const C = {
 
 const PLAYLIST_DEFS: Record<PlaylistId, PlaylistDef> = {
   A: {
-    targetEmotion: "calm",
+    targetEmotion: "relaxed",
     playlistType: "SavedPlaylist",
   },
   B: {
@@ -136,13 +136,13 @@ const PLAYLIST_DEFS: Record<PlaylistId, PlaylistDef> = {
     playlistType: "SavedPlaylist",
   },
   D: {
-    targetEmotion: "calm",
+    targetEmotion: "relaxed",
     playlistType: "Trajectory",
   },
 };
 
 const SEQUENCES: Record<TargetEmotion, [PlaylistId[], PlaylistId[]]> = {
-  calm: [
+  relaxed: [
     ["A", "B", "C", "D"],
     ["D", "C", "B", "A"],
   ],
@@ -465,13 +465,13 @@ export default function ParticipantsScreen() {
     if (DEBUG_MODE) {
       return [
         startEmotion || "Bored",
-        givenTargetEmotion || targetEmotion || "Calm",
+        givenTargetEmotion || targetEmotion || "Relaxed",
       ];
     }
 
     let trajec = buildEmotionPath(
       startEmotion,
-      givenTargetEmotion || targetEmotion || "Calm",
+      givenTargetEmotion || targetEmotion || "Relaxed",
       AI_TRAJECTORY_LENGTH - 2,
       false,
     );
@@ -479,7 +479,7 @@ export default function ParticipantsScreen() {
     if (trajec.length === 1) {
       return [
         startEmotion || "Bored",
-        givenTargetEmotion || targetEmotion || "Calm",
+        givenTargetEmotion || targetEmotion || "Relaxed",
       ];
     }
     return trajec;
@@ -498,7 +498,7 @@ export default function ParticipantsScreen() {
         : DEFAULT_HEALTH_DATA;
 
     const prompt = await buildLyricsPrompt(
-      startEmotion || "Calm",
+      startEmotion || "Relaxed",
       currHealthData,
     );
 
@@ -529,14 +529,14 @@ export default function ParticipantsScreen() {
     let generatedStreamUrl = null;
     let sunoOrgPayload = null;
     const tempoRange = computeTempoRange(
-      startEmotion || "calm",
+      startEmotion || "relaxed",
       currHealthData.heartRate || 0,
     );
     try {
       const generatedSong = await generateSong(
         currentLyrics || "Uplifting song",
         suggestedMusicStyle || user?.favoriteGenre || "Pop, Classical",
-        startEmotion || "Calm",
+        startEmotion || "Relaxed",
         currentSongIndex,
         user?.favoriteGenre,
         user?.favoriteBand,
@@ -613,7 +613,7 @@ export default function ParticipantsScreen() {
 
     let track = null;
     const targetEmotionArg =
-      (givenTargetEmotion || targetEmotion) === "calm" ? "calm" : "joyful";
+      (givenTargetEmotion || targetEmotion) === "relaxed" ? "relaxed" : "joyful";
     if (isPreGen) {
       track = await fetchSavedPlaylistTrack(targetEmotionArg);
     } else {
@@ -785,7 +785,7 @@ export default function ParticipantsScreen() {
     }
 
     const latestHealthData = await fetchAppleHealthData(5);
-    const currentMood = emotionTrajectory?.[nextSongIdx] || "Calm";
+    const currentMood = emotionTrajectory?.[nextSongIdx] || "Relaxed";
 
     console.log("Mood input for next song: ", currentMood);
     console.log("HR for next song: ", latestHealthData.heartRate);
@@ -819,7 +819,7 @@ export default function ParticipantsScreen() {
     let generatedStreamUrl = null;
     let sunoOrgPayload = null;
     const tempoRange = computeTempoRange(
-      currentMood || "calm",
+      currentMood || "relaxed",
       latestHealthData.heartRate || 0,
     );
     try {
@@ -895,9 +895,9 @@ export default function ParticipantsScreen() {
 
     let track = null;
     if (isPreGen) {
-      track = await fetchSavedPlaylistTrack(targetEmotion || "calm");
+      track = await fetchSavedPlaylistTrack(targetEmotion || "relaxed");
     } else {
-      track = await fetchJamendoTrack(targetEmotion || "calm");
+      track = await fetchJamendoTrack(targetEmotion || "relaxed");
     }
 
     if (!track) {
@@ -908,7 +908,7 @@ export default function ParticipantsScreen() {
     setSongQueue((prev) => [...prev, track]);
 
     try {
-      const currentMood = emotionTrajectory?.[nextSongIdx] || "Calm";
+      const currentMood = emotionTrajectory?.[nextSongIdx] || "Relaxed";
       const latestHealthData = await fetchAppleHealthData(5);
 
       const sessionId = await getSessionId();
@@ -1401,10 +1401,10 @@ export default function ParticipantsScreen() {
 
         <View style={styles.moodRow}>
           <MoodCard
-            mood="calm"
-            selected={targetEmotion === "calm"}
+            mood="relaxed"
+            selected={targetEmotion === "relaxed"}
             locked={isLocked}
-            onPress={() => setTargetEmotion("calm")}
+            onPress={() => setTargetEmotion("relaxed")}
           />
           <View style={{ width: 12 }} />
           <MoodCard

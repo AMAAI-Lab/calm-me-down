@@ -855,7 +855,7 @@ async function generateWithMock(
 }
 
 export async function fetchSavedPlaylistTrack(
-  emotion: "calm" | "joyful",
+  emotion: "relaxed" | "joyful",
 ): Promise<GeneratedSong> {
   if (!DEBUG_MODE) {
     await new Promise((r) => setTimeout(r, 12_000));
@@ -863,7 +863,7 @@ export async function fetchSavedPlaylistTrack(
 
   const playedIds = await getPgpIdsOfEmotion(emotion);
   const commonIds = ["1", "2", "3", "4"];
-  const totalIds = emotion === "calm" ? [...commonIds] : [...commonIds, "5"];
+  const totalIds = emotion === "relaxed" ? [...commonIds] : [...commonIds, "5"];
   const nonPlayedIds = totalIds.filter((id) => !playedIds.includes(id));
 
   const randomId =
@@ -883,7 +883,7 @@ export async function fetchSavedPlaylistTrack(
 }
 
 export async function fetchJamendoTrack(
-  emotion: "calm" | "joyful",
+  emotion: "relaxed" | "joyful",
 ): Promise<GeneratedSong> {
   if (!DEBUG_MODE) {
     await new Promise((r) => setTimeout(r, 12_000));
@@ -958,7 +958,7 @@ export async function downloadAndSaveAudio(
 // export async function fetchJamendoTrack(
 //   tags: string,
 //   index: number,
-//   emotion: "calm" | "joyful",
+//   emotion: "relaxed" | "joyful",
 // ): Promise<GeneratedSong | null> {
 //   try {
 //     if (!JAMENDO_API_KEY) {
