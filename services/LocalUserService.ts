@@ -154,28 +154,20 @@ export const clearPgpIds = async () => {
 // Methods for vocal gender counts
 export const getVocalGender = async (): Promise<string> => {
   const raw = await AsyncStorage.getItem(VOCAL_GENDER_COUNTS_KEY);
-  const counts = raw ? JSON.parse(raw) : {};
-
-  const mCount = Number(counts?.m || "0");
-  const fCount = Number(counts?.f || "0");
+  const vocals = raw ? JSON.parse(raw) : [];
+  const length = vocals?.length || 0
 
   let vocal;
-  const limit = AI_TRAJECTORY_LENGTH / 2;
-  if (mCount >= limit) {
-    vocal = "f";
-  } else if (fCount >= limit) {
-    vocal = "m";
-  } else {
+  if (!length) {
     vocal = Math.random() < 0.5 ? "m" : "f";
+  } else {
+    vocal = vocals[length - 1] === "m" ? "f" : "m"
   }
 
-  const newCounts = {
-    m: vocal === "m" ? mCount + 1 : mCount,
-    f: vocal === "f" ? fCount + 1 : fCount,
-  };
+  const newVocals = [...vocals, vocal]
   await AsyncStorage.setItem(
     VOCAL_GENDER_COUNTS_KEY,
-    JSON.stringify(newCounts),
+    JSON.stringify(newVocals),
   );
 
   return vocal;

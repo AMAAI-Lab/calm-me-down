@@ -44,70 +44,106 @@ export const CONTINUOUS_PLAYBACK_MS = 5000;
 
 export const EMOTION_MAP: EmotionPoint[] = [
   // ── Q1: High Valence, High Arousal ─────────────────────────────────────────
-  { emotion: "Excited", valence: 9.17, arousal: 9.38 }, // NRC
-  { emotion: "Thrilling", valence: 9.52, arousal: 9.14 }, // NRC
-  { emotion: "Elated", valence: 8.19, arousal: 8.2 }, // NRC+ANEW
-  { emotion: "Energetic", valence: 8.62, arousal: 8.81 }, // NRC
-  { emotion: "Playful", valence: 9.03, arousal: 7.19 }, // NRC
-  { emotion: "Lively", valence: 8.3, arousal: 7.19 }, // NRC+ANEW
-  { emotion: "Joyful", valence: 9.54, arousal: 6.59 }, // NRC+ANEW
-  { emotion: "Cheerful", valence: 9.96, arousal: 6.53 }, // NRC
-  { emotion: "Upbeat", valence: 8.9, arousal: 5.78 }, // NRC
-  { emotion: "Uplifting", valence: 7.94, arousal: 5.93 }, // NRC
-  { emotion: "Hopeful", valence: 8.69, arousal: 5.3 }, // NRC+ANEW
+  { emotion: "Liked",        valence: 9.83, arousal: 5.17 }, // Eerola (NRC)
+  { emotion: "Happy",        valence: 9.66, arousal: 7.15 }, // Eerola+Russell+J&L (War+NRC)
+  { emotion: "Encouraged",   valence: 9.58, arousal: 7.32 }, // Eerola (NRC)
+  { emotion: "Joyful",       valence: 9.54, arousal: 6.34 }, // Eerola (War+NRC) ← study target
+  { emotion: "In Love",      valence: 9.53, arousal: 5.50 }, // Eerola (NRC)
+  { emotion: "Fantastic",    valence: 9.50, arousal: 7.17 }, // Eerola (War+NRC)
+  { emotion: "Fun",          valence: 9.27, arousal: 7.79 }, // Eerola (War+NRC)
+  { emotion: "Successful",   valence: 9.18, arousal: 6.55 }, // Eerola (War+NRC)
+  { emotion: "Delighted",    valence: 9.15, arousal: 7.62 }, // Eerola+Russell (War+NRC)
+  { emotion: "Free",         valence: 9.11, arousal: 5.71 }, // Eerola (War+NRC)
+  { emotion: "Excited",      valence: 9.09, arousal: 8.25 }, // Eerola+Russell (War+NRC)
+  { emotion: "Pleasurable",  valence: 9.06, arousal: 6.38 }, // J&L (War+NRC)
+  { emotion: "Pleased",      valence: 9.06, arousal: 5.29 }, // Russell (War+NRC)
+  { emotion: "Positive",     valence: 9.01, arousal: 5.82 }, // Eerola (War+NRC)
+  { emotion: "Adorable",     valence: 8.96, arousal: 5.39 }, // Eerola (War+NRC)
+  { emotion: "Passionate",   valence: 8.95, arousal: 7.26 }, // Eerola (War+NRC)
+  { emotion: "Romantic",     valence: 8.93, arousal: 5.71 }, // Eerola (War+NRC)
+  { emotion: "Funny",        valence: 8.84, arousal: 6.21 }, // Eerola (War+NRC)
+  { emotion: "Playful",      valence: 8.75, arousal: 6.85 }, // Eerola (War+NRC)
+  { emotion: "Celebratory",  valence: 8.71, arousal: 6.88 }, // Eerola (NRC)
+  { emotion: "Enthusiastic", valence: 8.66, arousal: 7.66 }, // Eerola (War+NRC)
+  { emotion: "Inspired",     valence: 8.66, arousal: 6.72 }, // Eerola (War+NRC)
+  { emotion: "Amused",       valence: 8.64, arousal: 6.65 }, // J&L (War+NRC)
+  { emotion: "Heroic",       valence: 8.63, arousal: 6.98 }, // Eerola (War+NRC)
+  { emotion: "Glorious",     valence: 8.63, arousal: 6.09 }, // Eerola (War+NRC)
+  { emotion: "Energetic",    valence: 8.50, arousal: 7.78 }, // Eerola (War+NRC)
+  { emotion: "Strong",       valence: 8.38, arousal: 6.68 }, // Eerola (War+NRC)
+  { emotion: "Epic",         valence: 8.34, arousal: 6.35 }, // Eerola (War+NRC)
+  { emotion: "Motivational", valence: 8.32, arousal: 6.92 }, // Eerola (War+NRC)
+  { emotion: "Festive",      valence: 8.30, arousal: 6.96 }, // Eerola (War+NRC)
+  { emotion: "Amazed",       valence: 8.27, arousal: 7.29 }, // Eerola (War+NRC)
+  { emotion: "Elegant",      valence: 8.27, arousal: 5.14 }, // Eerola (War+NRC)
+  { emotion: "Euphoric",     valence: 8.18, arousal: 7.46 }, // Eerola (War+NRC)
+  { emotion: "Liberated",    valence: 8.02, arousal: 6.67 }, // Eerola (NRC)
+  { emotion: "Animated",     valence: 7.88, arousal: 6.72 }, // Eerola (War+NRC)
+  { emotion: "Moved",        valence: 7.86, arousal: 7.84 }, // J&L (NRC)
+  { emotion: "Uplifting",    valence: 7.82, arousal: 5.54 }, // Eerola (War+NRC)
+  { emotion: "Spontaneous",  valence: 7.67, arousal: 6.25 }, // Eerola (War+NRC)
+  { emotion: "Interested",   valence: 7.65, arousal: 5.32 }, // Eerola+J&L (War+NRC)
+  { emotion: "Powerful",     valence: 7.60, arousal: 7.21 }, // Eerola (War+NRC)
+  { emotion: "Emotional",    valence: 6.81, arousal: 6.64 }, // Eerola (War+NRC)
+  { emotion: "Astonished",   valence: 6.34, arousal: 7.15 }, // Russell (War+NRC)
+  { emotion: "Intense",      valence: 6.28, arousal: 7.63 }, // Eerola (War+NRC)
+  { emotion: "Hot",          valence: 5.87, arousal: 6.45 }, // Eerola (War+NRC)
 
   // ── Q2: Low Valence, High Arousal ──────────────────────────────────────────
-  { emotion: "Panicked", valence: 1.9, arousal: 9.54 }, // NRC
-  { emotion: "Enraged", valence: 2.19, arousal: 9.34 }, // NRC+ANEW
-  { emotion: "Agitated", valence: 5.0, arousal: 8.94 }, // NRC
-  { emotion: "Alarmed", valence: 2.69, arousal: 8.4 }, // NRC
-  { emotion: "Angry", valence: 2.59, arousal: 8.21 }, // NRC+ANEW
-  { emotion: "Anxious", valence: 4.41, arousal: 8.27 }, // NRC+ANEW
-  { emotion: "Nervous", valence: 3.23, arousal: 7.83 }, // NRC+ANEW
-  { emotion: "Distressed", valence: 2.17, arousal: 7.51 }, // NRC+ANEW
-  { emotion: "Stressed", valence: 2.5, arousal: 7.66 }, // NRC+ANEW
-  { emotion: "Frustrated", valence: 2.19, arousal: 6.52 }, // NRC+ANEW
-  { emotion: "Ashamed", valence: 2.4, arousal: 6.29 }, // NRC
-  { emotion: "Fearful", valence: 2.08, arousal: 6.17 }, // NRC+ANEW
-  { emotion: "Tense", valence: 4.22, arousal: 6.09 }, // NRC+ANEW
+  { emotion: "Jumpy",        valence: 4.73, arousal: 7.15 }, // Eerola (War+NRC)
+  { emotion: "Tense",        valence: 3.76, arousal: 5.41 }, // Russell+J&L (War+NRC)
+  { emotion: "Moody",        valence: 3.62, arousal: 6.90 }, // Eerola (War+NRC)
+  { emotion: "Distressed",   valence: 2.99, arousal: 7.44 }, // Russell (War+NRC)
+  { emotion: "Severe",       valence: 2.99, arousal: 6.80 }, // Eerola (War+NRC)
+  { emotion: "Aggressive",   valence: 2.73, arousal: 8.01 }, // Eerola (War+NRC)
+  { emotion: "Alarmed",      valence: 2.69, arousal: 8.40 }, // Russell (NRC)
+  { emotion: "Tragic",       valence: 2.63, arousal: 7.52 }, // Eerola (War+NRC)
+  { emotion: "Annoyed",      valence: 2.48, arousal: 6.94 }, // Russell (War+NRC)
+  { emotion: "Angry",        valence: 2.41, arousal: 7.66 }, // Eerola+Russell+J&L (War+NRC)
+  { emotion: "Frustrated",   valence: 2.23, arousal: 6.41 }, // Russell (War+NRC)
+  { emotion: "Miserable",    valence: 2.18, arousal: 5.36 }, // Russell (War+NRC)
+  { emotion: "Furious",      valence: 2.17, arousal: 8.16 }, // Eerola (War+NRC)
+  { emotion: "Afraid",       valence: 1.76, arousal: 6.36 }, // Russell (War+NRC)
 
   // ── Q3: Low Valence, Low Arousal ───────────────────────────────────────────
-  { emotion: "Sorrowful", valence: 1.44, arousal: 4.8 }, // NRC
-  { emotion: "Depressed", valence: 1.57, arousal: 5.1 }, // NRC+ANEW
-  { emotion: "Hopeless", valence: 1.85, arousal: 3.68 }, // NRC
-  { emotion: "Gloomy", valence: 1.96, arousal: 4.69 }, // NRC
-  { emotion: "Sad", valence: 2.36, arousal: 4.26 }, // NRC+ANEW
-  { emotion: "Apathetic", valence: 2.69, arousal: 3.63 }, // NRC
-  { emotion: "Melancholic", valence: 2.63, arousal: 3.75 }, // NRC
-  { emotion: "Lonely", valence: 2.78, arousal: 3.99 }, // NRC+ANEW
-  { emotion: "Bored", valence: 2.79, arousal: 2.78 }, // NRC+ANEW
-  { emotion: "Weary", valence: 3.44, arousal: 3.85 }, // NRC+ANEW
-  { emotion: "Sluggish", valence: 3.02, arousal: 2.12 }, // NRC
+  { emotion: "Sorry",        valence: 4.97, arousal: 4.67 }, // Eerola (War+NRC)
+  { emotion: "Droopy",       valence: 4.66, arousal: 3.80 }, // Russell (War+NRC)
+  { emotion: "Tired",        valence: 3.41, arousal: 3.92 }, // Russell (War+NRC)
+  { emotion: "Bored",        valence: 2.79, arousal: 3.24 }, // Eerola+Russell+J&L (War+NRC)
+  { emotion: "Gloomy",       valence: 2.69, arousal: 4.15 }, // Russell (War+NRC)
+  { emotion: "Sad",          valence: 2.63, arousal: 3.90 }, // Eerola+Russell+J&L (War+NRC)
+  { emotion: "Melancholic",  valence: 2.63, arousal: 3.75 }, // Eerola (NRC)
+  { emotion: "Depressed",    valence: 1.83, arousal: 4.83 }, // Russell (War+NRC)
 
   // ── Q4: High Valence, Low Arousal ──────────────────────────────────────────
-  { emotion: "Tranquil", valence: 9.63, arousal: 1.28 }, // NRC
-  { emotion: "Calm", valence: 8.88, arousal: 1.45 }, // NRC
-  { emotion: "Peaceful", valence: 8.8, arousal: 1.49 }, // NRC
-  { emotion: "Relaxed", valence: 8.27, arousal: 1.98 }, // NRC+ANEW
-  { emotion: "Serene", valence: 8.22, arousal: 2.19 }, // NRC
-  { emotion: "Restful", valence: 8.03, arousal: 2.04 }, // NRC
-  { emotion: "Content", valence: 7.88, arousal: 3.66 }, // NRC
-  { emotion: "Cozy", valence: 8.69, arousal: 3.91 }, // NRC+ANEW
-  { emotion: "Comforting", valence: 9.15, arousal: 4.03 }, // NRC
-  { emotion: "Dreamy", valence: 8.53, arousal: 4.15 }, // NRC
-  { emotion: "Grateful", valence: 8.89, arousal: 4.6 }, // NRC+ANEW
-  { emotion: "Nostalgic", valence: 5.12, arousal: 4.16 }, // NRC
-
-  // ── Cross-quadrant: Trajectory waypoints & mid-space ──────────────────────
-  { emotion: "Warm", valence: 7.84, arousal: 3.81 }, // NRC
-  { emotion: "Contemplative", valence: 7.56, arousal: 3.77 }, // NRC
-  { emotion: "Profound", valence: 7.8, arousal: 5.91 }, // NRC
-  { emotion: "Solemn", valence: 6.05, arousal: 4.11 }, // NRC+ANEW
-  { emotion: "Pensive", valence: 5.86, arousal: 2.98 }, // NRC
-  { emotion: "Indifferent", valence: 4.81, arousal: 2.93 }, // NRC+ANEW
-  { emotion: "Wistful", valence: 3.91, arousal: 5.06 }, // NRC
-  { emotion: "Detached", valence: 3.87, arousal: 4.62 }, // NRC+ANEW
-  { emotion: "Uneasy", valence: 2.04, arousal: 6.38 }, // NRC
+  { emotion: "Good",         valence: 9.09, arousal: 4.15 }, // Eerola (War+NRC)
+  { emotion: "Friendly",     valence: 8.97, arousal: 4.63 }, // Eerola (War+NRC)
+  { emotion: "Peaceful",     valence: 8.84, arousal: 3.15 }, // Eerola (War+NRC)
+  { emotion: "Satisfied",    valence: 8.78, arousal: 4.96 }, // Eerola+Russell (War+NRC)
+  { emotion: "Tranquil",     valence: 8.75, arousal: 2.04 }, // Eerola (War+NRC)
+  { emotion: "Pleasant",     valence: 8.73, arousal: 3.47 }, // Eerola (War+NRC)
+  { emotion: "Easy",         valence: 8.53, arousal: 3.46 }, // Eerola (War+NRC)
+  { emotion: "Dreamy",       valence: 8.43, arousal: 4.77 }, // Eerola (War+NRC)
+  { emotion: "Graceful",     valence: 8.42, arousal: 4.98 }, // Eerola (War+NRC)
+  { emotion: "Gentle",       valence: 8.42, arousal: 3.81 }, // Eerola (War+NRC)
+  { emotion: "Relaxed",      valence: 8.40, arousal: 2.04 }, // Eerola+Russell+J&L (War+NRC)
+  { emotion: "Cool",         valence: 8.26, arousal: 4.79 }, // Eerola (War+NRC)
+  { emotion: "Calm",         valence: 8.26, arousal: 1.60 }, // Russell (War+NRC) ← study target
+  { emotion: "Light Hearted",valence: 8.05, arousal: 4.60 }, // Eerola (NRC)
+  { emotion: "Spiritual",    valence: 7.93, arousal: 4.62 }, // Eerola+J&L (War+NRC)
+  { emotion: "Serene",       valence: 7.93, arousal: 3.66 }, // Eerola+Russell (War+NRC)
+  { emotion: "Soft",         valence: 7.87, arousal: 2.96 }, // Eerola (War+NRC)
+  { emotion: "Content",      valence: 7.64, arousal: 3.55 }, // Russell (War+NRC)
+  { emotion: "Tender",       valence: 6.91, arousal: 4.59 }, // J&L (War+NRC)
+  { emotion: "Religious",    valence: 6.69, arousal: 4.11 }, // Eerola (War+NRC)
+  { emotion: "Sentimental",  valence: 6.59, arousal: 3.79 }, // Eerola (War+NRC)
+  { emotion: "Reflective",   valence: 6.52, arousal: 3.66 }, // Eerola (War+NRC)
+  { emotion: "Longing",      valence: 6.44, arousal: 4.91 }, // J&L (NRC)
+  { emotion: "Nostalgic",    valence: 6.25, arousal: 4.47 }, // J&L (War+NRC)
+  { emotion: "Solemn",       valence: 6.25, arousal: 3.74 }, // J&L (War+NRC)
+  { emotion: "At Ease",      valence: 5.79, arousal: 3.84 }, // Russell (NRC)
+  { emotion: "Deep",         valence: 5.71, arousal: 4.76 }, // Eerola (War+NRC)
+  { emotion: "Sleepy",       valence: 5.61, arousal: 2.71 }, // Russell (War+NRC)
 ];
 
 export const EMOTION_OPTIONS = EMOTION_MAP.map((e) => e.emotion).sort();
@@ -487,10 +523,10 @@ export const EMOTION_TEMPO_MAP = {
 };
 
 export const EMOTION_GRID: string[][] = [
-  ["Stressed", "Angry", "Anxious", "Frustrated"],
-  ["Excited", "Energetic", "Hopeful", "Joyful"],
-  ["Sad", "Lonely", "Weary", "Bored"],
-  ["Calm", "Relaxed", "Content", "Peaceful"],
+  ["Distressed", "Angry", "Tense", "Frustrated", "Afraid"],
+  ["Excited", "Happy", "Delighted", "Joyful", "Inspired"],
+  ["Sad", "Melancholic", "Depressed", "Bored", "Tired"],
+  ["Relaxed", "Light Hearted", "Satisfied", "Peaceful", "Pleasant"],
 ];
 
 export const PRE_GENERATED_PLAYLIST = {
