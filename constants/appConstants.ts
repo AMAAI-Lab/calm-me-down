@@ -523,10 +523,10 @@ export const EMOTION_TEMPO_MAP = {
 };
 
 export const EMOTION_GRID: string[][] = [
-  ["Distressed", "Angry", "Tense", "Frustrated", "Afraid"],
-  ["Excited", "Happy", "Delighted", "Joyful", "Inspired"],
-  ["Sad", "Melancholic", "Depressed", "Bored", "Tired"],
-  ["Relaxed", "Light Hearted", "Satisfied", "Peaceful", "Pleasant"],
+  ["Distressed", "Angry", "Tense", "Frustrated", "Afraid"], //Q2
+  ["Excited", "Happy", "Delighted", "Joyful", "Inspired"], //Q1
+  ["Sad", "Melancholic", "Depressed", "Bored", "Tired"], // Q3
+  ["Relaxed", "Light Hearted", "Satisfied", "Peaceful", "Pleasant"], //Q4
 ];
 
 export const PRE_GENERATED_PLAYLIST = {
