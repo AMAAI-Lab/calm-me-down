@@ -37,7 +37,7 @@ export interface LyricsResult {
   musicStyle: string;
 }
 
-export const APP_VERSION = 13
+export const APP_VERSION = 14
 export const DEBUG_MODE = false;
 export const LISTEN_BEFORE_GENERATE_MS = 2000;
 export const CONTINUOUS_PLAYBACK_MS = 5000;
