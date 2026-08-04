@@ -201,6 +201,7 @@ export default function ParticipantsScreen() {
   );
   const [ratingUnlocked, setRatingUnlocked] = useState(false);
   const [showRatingAlert, setShowRatingAlert] = useState(false);
+  const [playlistReset, setPlaylistReset] = useState(false);
   const [playlistType, setPlaylistType] = useState<PlaylistType | "">("");
   const [lyricsQueue, setLyricsQueue] = useState<string[]>([]);
   const [emotionTrajectory, setEmotionTrajectory] = useState<string[]>([]);
@@ -239,18 +240,30 @@ export default function ParticipantsScreen() {
   }, [startEmotion, targetEmotion, healthData, feedbackSubmitted]);
 
   const nextPlaylistMsg = useMemo(() => {
-    if (!emotionCaptured?.[playlistIdx]?.post) {
-      return "Please update your emotion state after listening to this playlist.";
+    if (playlistReset) {
+      if (!startEmotion) {
+        return "Please select your starting emotion state above";
+      } else if (playlistIdx > 0) {
+        return "";
+      }
     } else if (!feedbackSubmitted?.[playlistIdx]?.post) {
       return "Please review the playlist in google form and also update the mood meter here.";
-    } else if (!emotionCaptured?.[playlistIdx + 1]?.pre) {
-      return "Please update the emotion state before starting the next one.";
+    } else if (!emotionCaptured?.[playlistIdx]?.post) {
+      return "Please update your emotion state after listening to this playlist.";
     } else if (!feedbackSubmitted?.[playlistIdx + 1]?.pre) {
       return "Please review the playlist in google form and also update the mood meter here before starting the next one.";
+    } else if (!emotionCaptured?.[playlistIdx + 1]?.pre) {
+      return "Please update the emotion state before starting the next one.";
     }
 
     return "Tap below to begin the next playlist.";
-  }, [feedbackSubmitted, playlistIdx, emotionCaptured]);
+  }, [
+    feedbackSubmitted,
+    playlistIdx,
+    emotionCaptured,
+    playlistReset,
+    startEmotion,
+  ]);
 
   const currPlaylistFinished =
     emotionTrajectory.length > 0 &&
@@ -268,12 +281,13 @@ export default function ParticipantsScreen() {
   const duration = player?.duration ?? 0;
   const currentTime = player?.currentTime ?? 0;
   const nextPlaylistBtnDisabled =
-    loading ||
-    !startEmotion ||
-    !feedbackSubmitted?.[playlistIdx]?.post ||
-    !feedbackSubmitted?.[playlistIdx + 1]?.pre ||
-    !emotionCaptured?.[playlistIdx]?.post ||
-    !emotionCaptured?.[playlistIdx + 1]?.pre;
+    (loading ||
+      !startEmotion ||
+      !feedbackSubmitted?.[playlistIdx]?.post ||
+      !feedbackSubmitted?.[playlistIdx + 1]?.pre ||
+      !emotionCaptured?.[playlistIdx]?.post ||
+      !emotionCaptured?.[playlistIdx + 1]?.pre) &&
+    (playlistIdx <= 0 || !playlistReset || !startEmotion);
   const showMoodMeterButton =
     !loading &&
     ((!songQueue.length && !feedbackSubmitted?.[playlistIdx]?.pre) ||
@@ -283,13 +297,20 @@ export default function ParticipantsScreen() {
           (!feedbackSubmitted?.[playlistIdx + 1]?.pre &&
             !allPlaylistsCompleted))));
   const isEmotionLocked =
-    loading ||
-    nextSongLoading ||
-    (songQueue.length > 0 && (!currPlaylistFinished || !ratingDone));
+    (loading ||
+      nextSongLoading ||
+      (songQueue.length > 0 && (!currPlaylistFinished || !ratingDone)) ||
+      (songQueue.length > 0 && !feedbackSubmitted?.[playlistIdx]?.post) ||
+      (emotionCaptured?.[playlistIdx]?.post &&
+        !feedbackSubmitted?.[playlistIdx + 1]?.pre)) &&
+    (playlistIdx <= 0 || !playlistReset);
+  const isMoodMeterDisabled =
+    feedbackSubmitted?.[playlistIdx]?.post &&
+    !emotionCaptured?.[playlistIdx]?.post;
   const currentActivity = ACTIVITY_SEQUENCE?.[playlistIdx] || "Sitting in Lab";
   const isPreGen = NON_AI_PLAYLIST_TYPE === "PRE_GEN";
 
-  const clearStates = async () => {
+  const clearStates = async (resetPlaylist = false) => {
     setSongQueue([]);
     setCurrentSongIndex(0);
     setGenerationLockedForIndex(null);
@@ -303,6 +324,13 @@ export default function ParticipantsScreen() {
     await clearPgpIds();
     await clearVocalGenderCounts();
     await clearJamendoIds();
+
+    if (resetPlaylist) {
+      setPlaylistReset(true);
+      if (playlistIdx === 0) {
+        setPhase("setup");
+      }
+    }
   };
 
   const fetchWeatherAndNews = async (
@@ -350,7 +378,7 @@ export default function ParticipantsScreen() {
       currentActivity === "Walking Outside" ? "Walking" : "Sitting";
     const about = ADD_ABOUT_TO_PROMPT && user?.about?.trim();
 
-    const preventRepetition = REPETITIVE_CHECK_IN_PROMPT
+    const preventRepetition = REPETITIVE_CHECK_IN_PROMPT;
     const repetitionRules = `
       PERSONALIZATION STRATEGY (IMPORTANT)
       Do not try to include every user input in the lyrics.
@@ -378,7 +406,7 @@ export default function ParticipantsScreen() {
       Another may focus on movement + inner emotion.
 
       The goal is a unique emotional story, not a summary of the user's data.      
-    `
+    `;
     const originalityRules = `
       6. ORIGINALITY and LYRIC VARIATION RULES:
       - Avoid repeating phrases, metaphors, sentence patterns, and imagery from previous songs.
@@ -392,7 +420,7 @@ export default function ParticipantsScreen() {
       heartbeat drums, echoes, midnight trains, neon lights.
 
       Use different vocabulary, environments, and metaphors each time.
-    `
+    `;
     const prompt = `
       You are a creative songwriter. Generate original song lyrics personalized to the following inputs:
 
@@ -425,17 +453,25 @@ export default function ParticipantsScreen() {
       2. Line count (STRICT): Verse = 4 lines, Chorus = 4 lines, Outro = 2 lines. Total: 14 lines.
       3. Line length: Each line must be 6–10 words. No long run-on lines.
       4. Tone: ${mood} and emotionally grounded.
-      ${preventRepetition ? `
+      ${
+        preventRepetition
+          ? `
       5. Integration:
       - Use selected personal/context elements naturally.
       - Do not force every input into the lyrics.
       - Physical state, environment, and news mood should only appear if they strengthen the emotional story.
-      ` : `
+      `
+          : `
       5. Integration: Integrate physical state, environment, and (if relevant) the news mood subtly and metaphorically
-      `}
-      ${preventRepetition ? `${originalityRules}` : `
+      `
+      }
+      ${
+        preventRepetition
+          ? `${originalityRules}`
+          : `
       6. Originality: Avoid clichés and generic motivational phrases.
-      `}
+      `
+      }
       7. Style: Use the genre and stylistic influence only for rhythm, imagery, and tone guidance—do not imitate or quote them.
       8. If an "About" detail is provided, subtly personalize the lyrics using relevant memories, interests, preferences, or life details. Keep it natural and poetic rather than directly repeating the text.
       ${addProfession ? `9. If profession information is available, subtly reflect experiences, aspirations, or everyday moments associated with that profession. Keep references natural and poetic rather than explicitly stating the profession.` : ``}
@@ -613,7 +649,9 @@ export default function ParticipantsScreen() {
 
     let track = null;
     const targetEmotionArg =
-      (givenTargetEmotion || targetEmotion) === "relaxed" ? "relaxed" : "joyful";
+      (givenTargetEmotion || targetEmotion) === "relaxed"
+        ? "relaxed"
+        : "joyful";
     if (isPreGen) {
       track = await fetchSavedPlaylistTrack(targetEmotionArg);
     } else {
@@ -662,15 +700,22 @@ export default function ParticipantsScreen() {
   };
 
   const handleStart = async () => {
+    setPlaylistReset(false);
     if (loading) {
       return;
     }
     setLoading(true);
 
     try {
-      if (!startEmotion || !targetEmotion) return;
-      const seq = pickSequence(targetEmotion);
-      setSequence(seq);
+      if (!startEmotion || !targetEmotion) {
+        return;
+      }
+
+      let seq = sequence;
+      if (!seq?.length) {
+        seq = pickSequence(targetEmotion);
+        setSequence(seq);
+      }
 
       const newSessionID = await createMusicSession(
         user?.email!,
@@ -702,12 +747,13 @@ export default function ParticipantsScreen() {
     setLoading(true);
 
     try {
-      const nextPlaylistIdx = playlistIdx + 1;
+      const nextPlaylistIdx = playlistReset ? playlistIdx : playlistIdx + 1;
       setPlaylistIdx(nextPlaylistIdx);
       if (nextPlaylistIdx >= sequence.length) {
         setLoading(false);
         return;
       }
+      setPlaylistReset(false);
 
       const nextSequenceId = sequence[nextPlaylistIdx];
       const newPlaylistDef = PLAYLIST_DEFS[nextSequenceId];
@@ -1337,9 +1383,11 @@ export default function ParticipantsScreen() {
 
           <Pressable
             onPress={handleNavigate}
+            disabled={isMoodMeterDisabled}
             style={[
               styles.startBtn,
               { borderWidth: 1, backgroundColor: "#1E1235" },
+              isMoodMeterDisabled && { opacity: 0.5 },
             ]}
           >
             <Text
@@ -1585,7 +1633,7 @@ export default function ParticipantsScreen() {
       )}
 
       {/* Thumbs Up/Down buttons */}
-      {ratingUnlocked && (
+      {ratingUnlocked && songQueue?.length > 0 && (
         <View
           style={{
             height: 40,
@@ -1682,14 +1730,15 @@ export default function ParticipantsScreen() {
       )}
 
       {/* Next Playlist button */}
-      {currPlaylistFinished && !allPlaylistsCompleted && ratingDone && (
+      {((playlistIdx > 0 && playlistReset) ||
+        (currPlaylistFinished && !allPlaylistsCompleted && ratingDone)) && (
         <View style={[styles.section, { marginTop: 60 }]}>
           <View style={styles.sectionHead}>
             <Text style={styles.sectionTitle}>{nextPlaylistMsg}</Text>
           </View>
 
           <Pressable
-            onPress={startNextPlaylist}
+            onPress={() => startNextPlaylist()}
             disabled={nextPlaylistBtnDisabled}
             style={[
               styles.startBtn,
@@ -1743,6 +1792,29 @@ export default function ParticipantsScreen() {
           onPress={handleLogout}
           icon={<FontAwesome5 name="sign-out-alt" size={22} color="#fff" />}
         />
+      </View>
+
+      {/* Reset Current Playlist */}
+      <View style={{ marginLeft: 40, marginRight: 20, marginTop: -30 }}>
+        <View
+          style={[
+            {
+              opacity: 0.7,
+              flexDirection: "row",
+              alignItems: "center",
+            },
+            !songQueue?.length && { opacity: 0.4 },
+          ]}
+        >
+          <Text style={{ color: "#ece5e5", fontSize: 12 }}>
+            Reset current playlist
+          </Text>
+          <CommonButton
+            onPress={() => clearStates(true)}
+            icon={<FontAwesome5 name="redo" size={22} color="#fff" />}
+            disabled={!songQueue?.length}
+          />
+        </View>
       </View>
 
       {/* Debug info */}

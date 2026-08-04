@@ -37,7 +37,7 @@ export interface LyricsResult {
   musicStyle: string;
 }
 
-export const APP_VERSION = 14
+export const APP_VERSION = 16
 export const DEBUG_MODE = false;
 export const LISTEN_BEFORE_GENERATE_MS = 2000;
 export const CONTINUOUS_PLAYBACK_MS = 5000;
@@ -1179,6 +1179,13 @@ export const JAMENDO_PLAYLIST = {
         Forcing upon me their new point of view
         As if I no longer orbit around you
 
+        But no matter how far away you might be
+        I can still feel the weight of your body on me
+        Baby, that’s gravity
+        Baby, that’s gravity
+        Baby, that’s gravity
+        Baby, that’s gravity
+
         Days pass me by and the phone doesn't ring
         You're far away and accelerating
         I'd pull you back if I had enough weight
@@ -1186,6 +1193,11 @@ export const JAMENDO_PLAYLIST = {
 
         But no matter how far away you might be
         I can still feel the weight of your body on me
+        Baby, that’s gravity
+        Baby, that’s gravity
+        Baby, that’s gravity
+        Baby, that’s gravity
+        Baby, that’s gravity
         Baby, that’s gravity
       `,
     },
