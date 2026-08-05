@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Photo Slideshow</title>
+<style>
+  :root{
+    --bg:#0b0b0d;
+    --fg:#f5f2ec;
+    --accent:#d8b26b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;background:var(--bg);overflow:hidden;font-family:'Helvetica Neue',Arial,sans-serif;}
+  .stage{position:relative;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;}
+  .slide{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.8s ease;}
+  .slide.active{opacity:1;}
+  .slide img{max-width:92vw;max-height:88vh;object-fit:contain;box-shadow:0 30px 80px rgba(0,0,0,0.6);border-radius:4px;}
+  .progress-track{position:absolute;bottom:28px;left:50%;transform:translateX(-50%);display:flex;gap:8px;}
+  .dot{width:36px;height:3px;background:rgba(245,242,236,0.2);border-radius:2px;overflow:hidden;}
+  .dot .fill{height:100%;width:0%;background:var(--accent);}
+  .dot.active .fill{animation:fillbar 3s linear forwards;}
+  @keyframes fillbar{from{width:0%;}to{width:100%;}}
+  .empty{color:var(--fg);text-align:center;font-size:18px;line-height:1.8;opacity:0.85;padding:40px;max-width:480px;}
+  .empty code{background:rgba(255,255,255,0.08);padding:2px 7px;border-radius:4px;font-size:15px;}
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="empty" id="empty" style="display:none;">
+    No images found.<br><br>
+    Put your photos in a folder named <code>images</code> next to this file,
+    then run <code>python generate-list.py</code> (or <code>python3 generate-list.py</code>)
+    and reopen this page.
+  </div>
+</div>
+
+<script src="image-list.js"></script>
+<script>
+  const stage = document.getElementById('stage');
+  const emptyMsg = document.getElementById('empty');
+  const SLIDE_SECONDS = 3;
+  const COUNT = 5;
+
+  function shuffle(arr){
+    const a = arr.slice();
+    for(let i = a.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  const list = (typeof imageList !== 'undefined' && Array.isArray(imageList)) ? imageList : [];
+
+  if(list.length === 0){
+    emptyMsg.style.display = 'block';
+  } else {
+    const chosen = shuffle(list).slice(0, Math.min(COUNT, list.length));
+
+    chosen.forEach((name, i) => {
+      const slide = document.createElement('div');
+      slide.className = 'slide' + (i === 0 ? ' active' : '');
+      slide.id = 'slide-' + i;
+      const img = document.createElement('img');
+      img.src = 'images/' + name;
+      img.alt = name;
+      slide.appendChild(img);
+      stage.appendChild(slide);
+    });
+
+    if(chosen.length > 1){
+      const dotsTrack = document.createElement('div');
+      dotsTrack.className = 'progress-track';
+      chosen.forEach((_, i) => {
+        const dot = document.createElement('div');
+        dot.className = 'dot' + (i === 0 ? ' active' : '');
+        dot.id = 'dot-' + i;
+        const fill = document.createElement('div');
+        fill.className = 'fill';
+        dot.appendChild(fill);
+        dotsTrack.appendChild(dot);
+      });
+      stage.appendChild(dotsTrack);
+    }
+
+    let current = 0;
+    function next(){
+      const prevSlide = document.getElementById('slide-' + current);
+      const prevDot = document.getElementById('dot-' + current);
+      prevSlide.classList.remove('active');
+      if(prevDot) prevDot.classList.remove('active');
+
+      current = (current + 1) % chosen.length;
+
+      const nextSlide = document.getElementById('slide-' + current);
+      const nextDot = document.getElementById('dot-' + current);
+      nextSlide.classList.add('active');
+      if(nextDot){
+        nextDot.classList.remove('active');
+        void nextDot.offsetWidth; // reflow to restart the fill animation
+        nextDot.classList.add('active');
+      }
+    }
+
+    if(chosen.length > 1){
+      setInterval(next, SLIDE_SECONDS * 1000);
+    }
+  }
+</script>
+</body>
+</html>
