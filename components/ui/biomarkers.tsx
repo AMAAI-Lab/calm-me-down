@@ -3,6 +3,7 @@ import BiomarkerCard from "./biomarker-card";
 import { FontAwesome5 } from "@expo/vector-icons";
 import { NewsData, WeatherData } from "@/services/WeatherNewsService";
 import { HealthData } from "@/services/HealthService";
+import { SHOW_NEWS, SHOW_WEATHER_INFO } from "@/constants/appConstants";
 
 interface BiomarkersProps {
   healthData?: HealthData | null;
@@ -39,7 +40,7 @@ export default function Biomarkers({
               />
             )}
 
-            {!isParticipantScreen ? (
+            {!isParticipantScreen && (
               <>
                 <BiomarkerCard
                   icon={
@@ -64,7 +65,9 @@ export default function Biomarkers({
                   value={weatherData?.city || "--"}
                 />
               </>
-            ) : (
+            )}
+
+            {isParticipantScreen && SHOW_WEATHER_INFO && (
               <BiomarkerCard
                 icon={
                   <FontAwesome5
@@ -83,17 +86,21 @@ export default function Biomarkers({
               />
             )}
 
-            <BiomarkerCard
-              icon={<FontAwesome5 name="newspaper" size={20} color="#b36cff" />}
-              label="News Headline"
-              value={
-                (Array.isArray(newsData?.headline)
-                  ? newsData?.headline[0]
-                  : newsData?.headline) || "--"
-              }
-              numberOfLines={3}
-              customWidth={100}
-            />
+            {(!isParticipantScreen || SHOW_NEWS) && (
+              <BiomarkerCard
+                icon={
+                  <FontAwesome5 name="newspaper" size={20} color="#b36cff" />
+                }
+                label="News Headline"
+                value={
+                  (Array.isArray(newsData?.headline)
+                    ? newsData?.headline[0]
+                    : newsData?.headline) || "--"
+                }
+                numberOfLines={3}
+                customWidth={100}
+              />
+            )}
           </View>
         </>
       )}

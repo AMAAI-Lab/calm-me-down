@@ -37,7 +37,7 @@ export interface LyricsResult {
   musicStyle: string;
 }
 
-export const APP_VERSION = 16
+export const APP_VERSION = 13
 export const DEBUG_MODE = false;
 export const LISTEN_BEFORE_GENERATE_MS = 2000;
 export const CONTINUOUS_PLAYBACK_MS = 5000;
@@ -514,6 +514,8 @@ export const ARTISTS_BY_GENRE: Record<string, string[]> = {
 };
 
 export const SHOW_LYRICS = true;
+export const SHOW_WEATHER_INFO = false;
+export const SHOW_NEWS = false;
 
 export const EMOTION_TEMPO_MAP = {
   relaxed: [60, 75],
@@ -1007,6 +1009,7 @@ export const AI_TRAJECTORY_LENGTH = 4;
 export const ADD_PROFESSION_TO_PROMPT = false;
 export const ADD_ABOUT_TO_PROMPT = true;
 export const REPETITIVE_CHECK_IN_PROMPT = true;
+export const AUTO_GENERATE_NEWS_IN_PROMPT = true;
 
 export const NON_AI_PLAYLIST_TYPE: "PRE_GEN" | "JAMENDO" = "JAMENDO";
 
@@ -1151,11 +1154,23 @@ export const JAMENDO_PLAYLIST = {
         Your love is with me
         Deep in my heart
         You and me
+        Me and you
 
         I’ve touched the sun and walked on clouds
         Like a bird a flew in the sky
         Seen seven wonders of the world
         And Marie Antoinette in Versailles
+
+        But those things ain’t nothing, next to your love
+        You’re the one that I need
+
+        You're always with me
+        Wherever we are
+        You can touch my heart and my soul
+        Your love is with me
+        Deep in my heart
+        You and me
+        Me and you
       `,
     },
     {
@@ -1224,7 +1239,7 @@ export const JAMENDO_PLAYLIST = {
         Where is love, because i surely don't know?
         I don't know
 
-        Think back to how we first met,
+        Remember how we first met,
         Or did you already forget?
         Like the time you forgot my birthday
         You stood there with nothing to say
@@ -1243,6 +1258,13 @@ export const JAMENDO_PLAYLIST = {
         Oh help me tap 3 times to get rid of you, i wanna tap my heels and get over you (x2)
         Over you, over you
 
+        What is love 'cause i'm really not sure anymore
+        What is love 'cause i'm really not sure anymore
+        What is love 'cause i'm really not sure anymore
+        Butterflies in my stomach, good night kisses no more
+
+        Where is the passion, the romance, and those flowers at my door?
+        Where is love, because i surely don't know?
         What is love 'cause i'm really not sure anymore
         Butterflies in my stomach, good night kisses no more
         I need the passion, the romance, and those flowers at my door?
@@ -1305,6 +1327,14 @@ export const JAMENDO_PLAYLIST = {
         Where you're hanging around, seems nothing new
         It could be you, It could be you, It could be you
         I’m finally asking you out: how do you do, do, do, do?
+
+        I am running around, looking for you
+        It could be you, It could be you, It could be you
+        Searching all over town, just to be sure
+        It could be you, It could be you, It could be you
+        Where you're hanging around, seems nothing new
+        It could be you, It could be you, It could be you
+        I’m finally asking you out: how do you do, do, do, do?
       `,
     },
     {
@@ -1347,6 +1377,11 @@ export const JAMENDO_PLAYLIST = {
         Just keep the feel flowing, flowing
         Just keep the feel flowing
         Keep the feel flowing
+
+        Just keep the feel flowing
+        Just keep the feel flowing
+        Just keep the feel flowing, flowing
+        Just keep the feel flowing
       `,
     },
     {
@@ -1411,6 +1446,11 @@ export const JAMENDO_PLAYLIST = {
         And the things that we’ll do up ahead
         We’re one in a billion but still we’re together
         By chance or fate.
+
+        I open my eyes and I see you
+        You’re there by my side all along
+        The smile on your face
+        Always tells me love came true (oohhhhhh).
 
         I open my eyes and I see you
         You’re there by my side all along

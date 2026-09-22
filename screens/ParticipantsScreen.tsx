@@ -28,6 +28,7 @@ import {
   ADD_PROFESSION_TO_PROMPT,
   AI_TRAJECTORY_LENGTH,
   APP_VERSION,
+  AUTO_GENERATE_NEWS_IN_PROMPT,
   CONTINUOUS_PLAYBACK_MS,
   DEBUG_MODE,
   DEFAULT_HEALTH_DATA,
@@ -36,6 +37,8 @@ import {
   NON_AI_PLAYLIST_TYPE,
   REPETITIVE_CHECK_IN_PROMPT,
   SHOW_LYRICS,
+  SHOW_NEWS,
+  SHOW_WEATHER_INFO,
 } from "@/constants/appConstants";
 import {
   downloadAndSaveAudio,
@@ -218,6 +221,7 @@ export default function ParticipantsScreen() {
   );
 
   const nudgeAnim = useRef(new Animated.Value(1)).current;
+  const moodButtonAnim = useRef(new Animated.Value(1)).current;
   const listenIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const generateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -394,6 +398,46 @@ export default function ParticipantsScreen() {
       - Mood
       - Music style influence
       - Physical state
+      - News context, ONLY when it is emotionally relevant to the mood
+
+      ${
+        AUTO_GENERATE_NEWS_IN_PROMPT
+          ? `
+      NEWS CONTEXT (OPTIONAL):
+      News is an optional creative element, just like the other personalization inputs.
+      It does NOT need to appear in every song.
+
+      First internally decide whether news would strengthen the current song.
+      If a provided news headline is available and emotionally relevant to the mood:
+      - You may select it as one of the 2–4 elements.
+      - Do not summarize or directly reproduce the headline.
+      - Extract a relatable human emotion, situation, experience, or broader theme from it.
+      - Weave that theme naturally into the lyrics.
+
+      If provided news is unavailable, irrelevant, or does not fit the selected
+      emotional direction:
+      - You may optionally create a fictional, general "news-like" situation
+        that naturally fits the mood.
+      - This should be used only as creative inspiration, not as factual current news.
+      - Do not invent real people, organizations, locations, statistics, or specific
+        current events.
+      - Keep the imagined situation broad and human, such as a community helping
+        each other, a small local celebration, a new discovery, people rebuilding
+        after difficulty, or an unexpected act of kindness.
+      - Transform the situation into an emotion or human experience rather than
+        writing a news report.
+
+      The model should decide internally whether to use:
+      A) the provided news,
+      B) an internally imagined news-like context, or
+      C) no news context at all.
+
+      News, whether provided or internally imagined, counts as ONE personalization
+      element within the 2–4 element limit.
+      Do not force news into the song.
+        `
+        : ``
+      }
 
       Treat the remaining inputs as background context only.
 
@@ -443,7 +487,7 @@ export default function ParticipantsScreen() {
       ENVIRONMENT
       - Location: ${weather?.city || "Unknown"}
       - Weather: ${weather?.temperature ? `${weather.temperature}°C, ${weather.description}` : "Unknown"}
-      - News mood cue (optional): ${news?.headline || "N/A"}
+      - Optional news inspiration (use only if emotionally relevant): ${news?.headline || "N/A"}
 
       ${preventRepetition ? `${repetitionRules}` : ""}
 
@@ -459,7 +503,9 @@ export default function ParticipantsScreen() {
       5. Integration:
       - Use selected personal/context elements naturally.
       - Do not force every input into the lyrics.
-      - Physical state, environment, and news mood should only appear if they strengthen the emotional story.
+      - Physical state, environment, activity and news should only appear if they strengthen the emotional story.
+      - News is optional and may be omitted entirely.
+      - If news is selected, incorporate its underlying human emotion or theme subtly and metaphorically rather than describing it literally.
       `
           : `
       5. Integration: Integrate physical state, environment, and (if relevant) the news mood subtly and metaphorically
@@ -1323,6 +1369,29 @@ export default function ParticipantsScreen() {
     }
   }, [ratingUnlocked, currentSongIndex, songRatings]);
 
+  // Pulse animation - Mood meter button
+  useEffect(() => {
+    if (showMoodMeterButton && !isMoodMeterDisabled) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(moodButtonAnim, {
+            toValue: 1.07,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(moodButtonAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+        ]),
+      ).start();
+    } else {
+      moodButtonAnim.stopAnimation();
+      moodButtonAnim.setValue(1);
+    }
+  }, [showMoodMeterButton, isMoodMeterDisabled]);
+
   // Scroll the view towards lyrics container once the lyrics are ready
   useEffect(() => {
     if (!currentSongLyrics) return;
@@ -1381,21 +1450,47 @@ export default function ParticipantsScreen() {
             </View>
           )}
 
-          <Pressable
-            onPress={handleNavigate}
-            disabled={isMoodMeterDisabled}
-            style={[
-              styles.startBtn,
-              { borderWidth: 1, backgroundColor: "#1E1235" },
-              isMoodMeterDisabled && { opacity: 0.5 },
-            ]}
+          <Animated.View
+            style={{
+              marginLeft: 0,
+              transform: [
+                {
+                  scale: !isMoodMeterDisabled ? moodButtonAnim : 1,
+                },
+              ],
+            }}
           >
-            <Text
-              style={[styles.startBtnText, { color: "#B07FE0", fontSize: 18 }]}
+            <Pressable
+              onPress={handleNavigate}
+              disabled={isMoodMeterDisabled}
+              style={[
+                styles.startBtn,
+                {
+                  borderWidth: 1,
+                  backgroundColor: "#1E1235",
+                  width: "95%",
+                  marginHorizontal: "auto",
+                },
+                isMoodMeterDisabled && { opacity: 0.5, width: "100%" },
+              ]}
             >
-              Update mood meter
-            </Text>
-          </Pressable>
+              <Text
+                style={[
+                  styles.startBtnText,
+                  { color: "#B07FE0", fontSize: 18 },
+                ]}
+              >
+                Update mood meter
+              </Text>
+
+              <FontAwesome5
+                name="long-arrow-alt-right"
+                size={21}
+                color="#B07FE0"
+                marginTop={3}
+              />
+            </Pressable>
+          </Animated.View>
         </View>
       )}
 
@@ -1527,19 +1622,21 @@ export default function ParticipantsScreen() {
       )}
 
       {/* Weather and News info */}
-      <View
-        style={[
-          styles.section,
-          { marginTop: 0 },
-          weatherData && { marginBottom: 20 },
-        ]}
-      >
-        <Biomarkers
-          weatherData={weatherData}
-          newsData={newsData}
-          isParticipantScreen={true}
-        />
-      </View>
+      {(SHOW_NEWS || SHOW_WEATHER_INFO) && (
+        <View
+          style={[
+            styles.section,
+            { marginTop: 0 },
+            weatherData && { marginBottom: 20 },
+          ]}
+        >
+          <Biomarkers
+            weatherData={weatherData}
+            newsData={newsData}
+            isParticipantScreen={true}
+          />
+        </View>
+      )}
 
       {/* Trajectory song */}
       {currentSong && (
@@ -1679,7 +1776,7 @@ export default function ParticipantsScreen() {
           </Animated.View>
         </View>
       )}
-      {showRatingAlert && (
+      {showRatingAlert && songQueue?.length > 0 && (
         <Text style={styles.ratingAlertText}>
           👆 Rate this song to continue to the next one
         </Text>
