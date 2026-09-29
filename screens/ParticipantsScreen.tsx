@@ -8,6 +8,7 @@ import React, {
 import {
   ActivityIndicator,
   Animated,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -49,7 +50,7 @@ import {
   generateSong,
   onFinalReady,
 } from "@/services/MusicGenerationService";
-import { formatTime } from "@/util/commonUtils";
+import { capitalize, formatTime } from "@/util/commonUtils";
 import {
   setAudioModeAsync,
   useAudioPlayer,
@@ -97,7 +98,6 @@ import { shareLogs, viewLogs } from "@/services/LoggerService";
 import LoadingPhrases from "@/components/ui/loading-phrases";
 import { buildEmotionPath } from "@/services/EmotionPathService";
 import EmotionGrid from "@/components/ui/emotion-grid";
-import EmotionModal from "@/components/ui/emotion-modal";
 
 type TargetEmotion = "relaxed" | "joyful";
 type PlaylistType = "Trajectory" | "SavedPlaylist";
@@ -182,8 +182,9 @@ export default function ParticipantsScreen() {
   const [healthProvider, setHealthProvider] =
     useState<HealthProvider>("Apple Health");
 
-  const [isPreFeedbackMessage, setIsPreFeedbackMessage] = useState(true);
-  const [showEmotionModal, setShowEmotionModal] = useState(false);
+  // const [isPreFeedbackMessage, setIsPreFeedbackMessage] = useState(true);
+  // const [showEmotionModal, setShowEmotionModal] = useState(false);
+  const [debugModalVisible, setDebugModalVisible] = useState(false);
   const [songJustFinished, setSongJustFinished] = useState(false);
   const [nextSongLoading, setNextSongLoading] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -222,6 +223,7 @@ export default function ParticipantsScreen() {
 
   const nudgeAnim = useRef(new Animated.Value(1)).current;
   const moodButtonAnim = useRef(new Animated.Value(1)).current;
+  const indicatorAnim = useRef(new Animated.Value(1)).current;
   const listenIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const generateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -313,6 +315,15 @@ export default function ParticipantsScreen() {
     !emotionCaptured?.[playlistIdx]?.post;
   const currentActivity = ACTIVITY_SEQUENCE?.[playlistIdx] || "Sitting in Lab";
   const isPreGen = NON_AI_PLAYLIST_TYPE === "PRE_GEN";
+  const showNextPlaylistBtn =
+    (playlistIdx > 0 && playlistReset) ||
+    (currPlaylistFinished && !allPlaylistsCompleted && ratingDone);
+  const indicatorIcon = useMemo(() => {
+    if (showMoodMeterButton && !isMoodMeterDisabled) return "";
+    else if (!startEmotion) return "start";
+    else if (!targetEmotion) return "target";
+    return "";
+  }, [showMoodMeterButton, isMoodMeterDisabled, startEmotion, targetEmotion]);
 
   const clearStates = async (resetPlaylist = false) => {
     setSongQueue([]);
@@ -436,7 +447,7 @@ export default function ParticipantsScreen() {
       element within the 2–4 element limit.
       Do not force news into the song.
         `
-        : ``
+          : ``
       }
 
       Treat the remaining inputs as background context only.
@@ -493,8 +504,8 @@ export default function ParticipantsScreen() {
 
       TASK:
       Write cohesive song lyrics.
-      1. Structure: Verse 1, Chorus, Verse 2, and Outro.
-      2. Line count (STRICT): Verse = 4 lines, Chorus = 4 lines, Outro = 2 lines. Total: 14 lines.
+      1. Structure: Verse 1, Pre-Chorus, Chorus, Verse 2, Pre-Chorus, Chorus, Outro.
+      2. Line count (STRICT): Verse = 4 lines, Pre-Chorus = 2 lines, Chorus = 4 lines, Outro = 3 lines. Total: 23 lines.
       3. Line length: Each line must be 6–10 words. No long run-on lines.
       4. Tone: ${mood} and emotionally grounded.
       ${
@@ -532,9 +543,12 @@ export default function ParticipantsScreen() {
       {
         "lyrics": {
           "verse1": "line1\nline2\nline3\nline4",
+          "pre_chorus": "line1\nline2",
           "chorus": "line1\nline2\nline3\nline4",
           "verse2": "line1\nline2\nline3\nline4",
-          "outro": "line1\nline2"
+          "pre_chorus2": "line1\nline2",
+          "chorus2": "line1\nline2\nline3\nline4",
+          "outro": "line1\nline2\nline3"
         },
         "musicStyle": "short suno-style descriptor here"
       }
@@ -1076,18 +1090,18 @@ export default function ParticipantsScreen() {
     } as never);
   };
 
-  const showModalIfBothFeedbackCaptured = (
-    feedbackSubmittedVal: any = null,
-  ) => {
-    if (
-      !allPlaylistsCompleted &&
-      emotionCaptured?.[playlistIdx]?.post &&
-      (feedbackSubmittedVal || feedbackSubmitted)?.[playlistIdx]?.post
-    ) {
-      setShowEmotionModal(true);
-      setIsPreFeedbackMessage(true);
-    }
-  };
+  // const showModalIfBothFeedbackCaptured = (
+  //   feedbackSubmittedVal: any = null,
+  // ) => {
+  //   if (
+  //     !allPlaylistsCompleted &&
+  //     emotionCaptured?.[playlistIdx]?.post &&
+  //     (feedbackSubmittedVal || feedbackSubmitted)?.[playlistIdx]?.post
+  //   ) {
+  //     setShowEmotionModal(true);
+  //     setIsPreFeedbackMessage(true);
+  //   }
+  // };
 
   const handleStartEmotion = async (emotion: string) => {
     setStartEmotion(emotion);
@@ -1132,7 +1146,7 @@ export default function ParticipantsScreen() {
     }));
 
     if (type === "post" && !bothCaptured) {
-      showModalIfBothFeedbackCaptured();
+      // showModalIfBothFeedbackCaptured();
       const feedbackData = await getPlaylistFeedback();
       const sessionId = await getSessionId();
       const trajectoryId = await getTrajectoryId();
@@ -1148,13 +1162,15 @@ export default function ParticipantsScreen() {
     navigation.navigate("Login" as never);
   };
 
+  const closeDebugModal = () => setDebugModalVisible(false);
+
   // Fetch news and weather info
   useEffect(() => {
     fetchWeatherAndNews(true);
 
-    setTimeout(() => {
-      setShowEmotionModal(true);
-    }, 2000);
+    // setTimeout(() => {
+    //   setShowEmotionModal(true);
+    // }, 2000);
 
     setAudioModeAsync({
       playsInSilentMode: true, // iOS: play even when muted
@@ -1226,10 +1242,10 @@ export default function ParticipantsScreen() {
         setShowRatingAlert(true);
       }
 
-      if (index === emotionTrajectory.length - 1) {
-        setShowEmotionModal(true);
-        setIsPreFeedbackMessage(false);
-      }
+      // if (index === emotionTrajectory.length - 1) {
+      //   setShowEmotionModal(true);
+      //   setIsPreFeedbackMessage(false);
+      // }
 
       updateTrackInDB(
         {
@@ -1392,6 +1408,33 @@ export default function ParticipantsScreen() {
     }
   }, [showMoodMeterButton, isMoodMeterDisabled]);
 
+  // Pulse animation - Start and Target emotion inputs
+  useEffect(() => {
+    if (indicatorIcon) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(indicatorAnim, {
+            toValue: 0.7,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(indicatorAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      loop.start();
+
+      return () => loop.stop();
+    } else {
+      indicatorAnim.stopAnimation();
+      indicatorAnim.setValue(1);
+    }
+  }, [indicatorIcon]);
+  // }, [showMoodMeterButton, startEmotion, targetEmotion]);
+
   // Scroll the view towards lyrics container once the lyrics are ready
   useEffect(() => {
     if (!currentSongLyrics) return;
@@ -1413,16 +1456,16 @@ export default function ParticipantsScreen() {
   // Unlocks start next playlist button once user has given a feedback
   useFocusEffect(
     useCallback(() => {
-      const prevVal = { ...feedbackSubmitted };
+      // const prevVal = { ...feedbackSubmitted };
 
       getFeedbackSubmitted().then((val) => {
         setFeedbackSubmitted(val);
 
-        if (!prevVal?.[playlistIdx]?.post) {
-          setTimeout(() => {
-            showModalIfBothFeedbackCaptured(val);
-          }, 3000);
-        }
+        // if (!prevVal?.[playlistIdx]?.post) {
+        //   setTimeout(() => {
+        //     showModalIfBothFeedbackCaptured(val);
+        //   }, 3000);
+        // }
       });
     }, []),
   );
@@ -1499,20 +1542,46 @@ export default function ParticipantsScreen() {
         style={styles.section}
         pointerEvents={isEmotionLocked ? "none" : "auto"}
       >
-        <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>
-            {isEmotionLocked
-              ? "Starting emotion state"
-              : "How do you feel right now?"}
-          </Text>
-          {isEmotionLocked && (
-            <FontAwesome5
-              name="lock"
-              size={11}
-              color={C.textDim}
-              style={{ marginLeft: 4 }}
-            />
+        <View style={{ flexDirection: "row", gap: 15 }}>
+          {indicatorIcon === "start" && (
+            <Animated.View
+              style={{
+                opacity: indicatorAnim,
+                marginTop: 5,
+                transform: [
+                  {
+                    scale: indicatorAnim
+                  },
+                ],
+              }}
+            >
+              <FontAwesome5 name="hand-point-right" size={22} color={"#fff"} />
+            </Animated.View>
           )}
+
+          <View style={{ width: "100%" }}>
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionTitle}>
+                {isEmotionLocked
+                  ? "Starting emotion state"
+                  : "How do you feel right now?"}
+              </Text>
+              {isEmotionLocked && (
+                <FontAwesome5
+                  name="lock"
+                  size={11}
+                  color={C.textDim}
+                  style={{ marginLeft: 4 }}
+                />
+              )}
+            </View>
+
+            {!isEmotionLocked && (
+              <Text style={styles.sectionSubTitle}>
+                (Select a single emotion)
+              </Text>
+            )}
+          </View>
         </View>
 
         <View
@@ -1528,18 +1597,44 @@ export default function ParticipantsScreen() {
 
       {/* Desired Emotion selection */}
       <View style={styles.section}>
-        <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>
-            {isLocked ? "Target Emotion" : "How would you like to feel?"}
-          </Text>
-          {isLocked && (
-            <FontAwesome5
-              name="lock"
-              size={11}
-              color={C.textDim}
-              style={{ marginLeft: 4 }}
-            />
+        <View style={{ flexDirection: "row", gap: 15 }}>
+          {indicatorIcon === "target" && (
+            <Animated.View
+              style={{
+                opacity: indicatorAnim,
+                marginTop: 5,
+                transform: [
+                  {
+                    scale: indicatorAnim
+                  },
+                ],
+              }}
+            >
+              <FontAwesome5 name="hand-point-right" size={22} color={"#fff"} />
+            </Animated.View>
           )}
+
+          <View style={{ width: "100%" }}>
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionTitle}>
+                {isLocked ? "Target Emotion" : "How would you like to feel?"}
+              </Text>
+              {isLocked && (
+                <FontAwesome5
+                  name="lock"
+                  size={11}
+                  color={C.textDim}
+                  style={{ marginLeft: 4 }}
+                />
+              )}
+            </View>
+
+            {!isLocked && (
+              <Text style={styles.sectionSubTitle}>
+                (Select your target emotion)
+              </Text>
+            )}
+          </View>
         </View>
 
         <View style={styles.moodRow}>
@@ -1561,20 +1656,7 @@ export default function ParticipantsScreen() {
 
       {/* Trajectory Number and Location Labels */}
       {(currentSong || currentActivity) && (
-        <View
-          style={{
-            gap: 5,
-            backgroundColor: "#181B24",
-            borderRadius: 10,
-            borderWidth: 1,
-            borderColor: "#34373C",
-            marginHorizontal: 24,
-            marginTop: 24,
-            marginBottom: 15,
-            paddingHorizontal: 15,
-            paddingVertical: 10,
-          }}
-        >
+        <View style={styles.sectionContainer}>
           {currentSong && (
             <View
               style={{
@@ -1635,6 +1717,66 @@ export default function ParticipantsScreen() {
             newsData={newsData}
             isParticipantScreen={true}
           />
+        </View>
+      )}
+
+      {/* Music journey and Fav Genre labels */}
+      {((startEmotion && targetEmotion) || user?.favoriteGenre) && (
+        <View style={styles.sectionContainer}>
+          {startEmotion && targetEmotion && (
+            <View
+              style={{
+                flexDirection: "row",
+                gap: 5,
+              }}
+            >
+              <Text style={{ color: C.text, fontSize: 14, opacity: 0.9 }}>
+                Music journey:
+              </Text>
+
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 5,
+                  flex: 1,
+                }}
+              >
+                <Text style={{ color: "#fff", fontSize: 14, fontWeight: 800 }}>
+                  {capitalize(startEmotion)}
+                </Text>
+
+                <FontAwesome5
+                  name="long-arrow-alt-right"
+                  size={17}
+                  color="#fff"
+                  marginTop={5}
+                />
+
+                <Text style={{ color: "#fff", fontSize: 14, fontWeight: 800 }}>
+                  {capitalize(targetEmotion)}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {user?.favoriteGenre && (
+            <Text
+              style={{ color: C.text, fontSize: 14, opacity: 0.9 }}
+              numberOfLines={3}
+              ellipsizeMode="tail"
+            >
+              Favorite Genre:{" "}
+              <Text
+                style={{ color: "#fff", opacity: 1, fontWeight: 800 }}
+                numberOfLines={2}
+                ellipsizeMode="tail"
+              >
+                {user.favoriteGenre}
+              </Text>
+            </Text>
+          )}
         </View>
       )}
 
@@ -1721,6 +1863,7 @@ export default function ParticipantsScreen() {
                     color="#9b5cff"
                   />
                 }
+                disabled={showNextPlaylistBtn && !nextPlaylistBtnDisabled}
               />
             ) : (
               <ActivityIndicator color="#fff" size={30} />
@@ -1827,8 +1970,7 @@ export default function ParticipantsScreen() {
       )}
 
       {/* Next Playlist button */}
-      {((playlistIdx > 0 && playlistReset) ||
-        (currPlaylistFinished && !allPlaylistsCompleted && ratingDone)) && (
+      {showNextPlaylistBtn && (
         <View style={[styles.section, { marginTop: 60 }]}>
           <View style={styles.sectionHead}>
             <Text style={styles.sectionTitle}>{nextPlaylistMsg}</Text>
@@ -1871,100 +2013,100 @@ export default function ParticipantsScreen() {
       )}
 
       {/* Emotion Modal */}
-      <EmotionModal
+      {/* <EmotionModal
         visible={showEmotionModal}
         heading="How do you feel right now?"
         subheading={`Please update your emotion state and mood meter ${isPreFeedbackMessage ? "before starting the new playlist." : "after listening to this playlist."}`}
         onClose={() => setShowEmotionModal(false)}
-      />
+      /> */}
 
-      {/* Logout button */}
-      <View
-        style={[styles.sectionHead, { gap: 0, marginTop: 60, opacity: 0.5 }]}
+      {/* Debug options */}
+      <Pressable
+        style={styles.optionsTrigger}
+        onPress={() => setDebugModalVisible(true)}
       >
-        <Text style={{ color: "#ece5e5", fontSize: 12, marginLeft: 40 }}>
-          Logout
-        </Text>
-        <CommonButton
-          onPress={handleLogout}
-          icon={<FontAwesome5 name="sign-out-alt" size={22} color="#fff" />}
-        />
-      </View>
-
-      {/* Reset Current Playlist */}
-      <View style={{ marginLeft: 40, marginRight: 20, marginTop: -30 }}>
-        <View
-          style={[
-            {
-              opacity: 0.7,
-              flexDirection: "row",
-              alignItems: "center",
-            },
-            !songQueue?.length && { opacity: 0.4 },
-          ]}
+        <FontAwesome5 name="ellipsis-h" size={25} color="#fff" />
+      </Pressable>
+      {debugModalVisible && (
+        <Modal
+          visible={debugModalVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={closeDebugModal}
         >
-          <Text style={{ color: "#ece5e5", fontSize: 12 }}>
-            Reset current playlist
-          </Text>
-          <CommonButton
-            onPress={() => clearStates(true)}
-            icon={<FontAwesome5 name="redo" size={22} color="#fff" />}
-            disabled={!songQueue?.length}
-          />
-        </View>
-      </View>
+          {/* Backdrop */}
+          <Pressable style={styles.backdrop} onPress={closeDebugModal} />
 
-      {/* Debug info */}
-      <View
-        style={{
-          marginTop: 20,
-          opacity: 0.5,
-          display: "flex",
-          flexDirection: "row",
-          alignItems: "center",
-          paddingHorizontal: 20,
-        }}
-      >
-        <Text style={{ color: "#ece5e5", fontSize: 12 }}>View logs</Text>
-        <CommonButton
-          onPress={viewLogs}
-          icon={<FontAwesome5 name="eye" size={22} color="#fff" />}
-        />
-        <Text style={{ color: "#ece5e5", fontSize: 12, marginLeft: 5 }}>
-          Share logs
-        </Text>
-        <CommonButton
-          onPress={shareLogs}
-          icon={<FontAwesome5 name="share" size={22} color="#fff" />}
-        />
-      </View>
-      {/* {songQueue && songQueue.length > 0 && (
-        <View style={{ marginTop: 20, opacity: 0.5, paddingHorizontal: 20 }}>
-          <Text style={{ color: "#ece5e5", fontSize: 12 }}>
-            Current music number: {currentSongIndex + 1}
-          </Text>
-          <Text style={{ color: "#ece5e5", fontSize: 12 }}>
-            Audio source: {currentSong?.audioUrl || "--"}
-          </Text>
-          <Text style={{ color: "#ece5e5", fontSize: 12 }}>
-            Number of songs generated: {songQueue.length}
-          </Text>
-        </View>
-      )} */}
-      {DEBUG_MODE && (
-        <Pressable
-          onPress={handleNavigate}
-          style={[
-            styles.startBtn,
-            { borderWidth: 1, backgroundColor: "#1E1235" },
-          ]}
-        >
-          <Text
-            style={[styles.startBtnText, { color: "#B07FE0", fontSize: 18 }]}
-          >
-            {`Update mood meter (Test)`}
-          </Text>
-        </Pressable>
+          <View style={styles.sheet}>
+            <View style={styles.handle} />
+
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <Text style={styles.sheetTitle}>Debug Options</Text>
+              <CommonButton
+                onPress={closeDebugModal}
+                icon={<FontAwesome5 name="times" size={22} color="#fff" />}
+              />
+            </View>
+
+            {/* Logout */}
+            <View style={[styles.row, { opacity: 0.8, marginBottom: -20 }]}>
+              <Text style={styles.rowLabel}>Logout</Text>
+              <CommonButton
+                onPress={() => {
+                  closeDebugModal();
+                  handleLogout();
+                }}
+                icon={
+                  <FontAwesome5 name="sign-out-alt" size={18} color="#fff" />
+                }
+              />
+            </View>
+
+            {/* Reset current playlist */}
+            <View style={[styles.row, { opacity: 0.8, marginBottom: -20 }]}>
+              <Text style={styles.rowLabel}>Reset current playlist</Text>
+              <CommonButton
+                onPress={() => {
+                  closeDebugModal();
+                  clearStates(true);
+                }}
+                icon={<FontAwesome5 name="redo" size={18} color="#fff" />}
+                disabled={!songQueue?.length}
+              />
+            </View>
+
+            {/* View / Share logs */}
+            <View style={[styles.row, { opacity: 0.8 }]}>
+              <Text style={styles.rowLabel}>View logs</Text>
+              <CommonButton
+                onPress={viewLogs}
+                icon={<FontAwesome5 name="eye" size={22} color="#fff" />}
+              />
+              <Text style={[styles.rowLabel, { marginLeft: 15 }]}>
+                Share logs
+              </Text>
+              <CommonButton
+                onPress={shareLogs}
+                icon={<FontAwesome5 name="share" size={22} color="#fff" />}
+              />
+            </View>
+
+            {/* Debug-only Mood meter btn */}
+            {DEBUG_MODE && (
+              <Pressable onPress={handleNavigate} style={styles.debugBtn}>
+                <Text style={styles.debugBtnText}>
+                  Update mood meter (Test)
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        </Modal>
       )}
 
       {/* App version */}
@@ -2003,6 +2145,14 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   sectionTitle: { color: C.text, fontSize: 16, fontWeight: "700", flex: 1 },
+  sectionSubTitle: {
+    flex: 1,
+    color: "#fff",
+    fontSize: 15,
+    opacity: 0.9,
+    marginTop: -15,
+    marginBottom: 10,
+  },
   moodRow: { flexDirection: "row" },
   startBtn: {
     flexDirection: "row",
@@ -2062,5 +2212,73 @@ const styles = StyleSheet.create({
     marginTop: 8,
     opacity: 0.85,
     paddingHorizontal: 24,
+  },
+  sectionContainer: {
+    gap: 5,
+    backgroundColor: "#181B24",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#34373C",
+    marginHorizontal: 24,
+    marginTop: 24,
+    marginBottom: 15,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+  },
+
+  // debug modal styles
+  optionsTrigger: {
+    alignSelf: "center",
+    marginTop: 70,
+    opacity: 0.5,
+    padding: 10,
+  },
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  sheet: {
+    backgroundColor: "#190d2d",
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 30,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    marginBottom: 15,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#ece5e5",
+    opacity: 0.3,
+    alignSelf: "center",
+    marginBottom: 12,
+  },
+  sheetTitle: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  rowLabel: {
+    color: "#ece5e5",
+    fontSize: 13,
+  },
+  debugBtn: {
+    borderWidth: 1,
+    borderColor: "#B07FE0",
+    backgroundColor: "#1E1235",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  debugBtnText: {
+    color: "#B07FE0",
+    fontSize: 16,
   },
 });

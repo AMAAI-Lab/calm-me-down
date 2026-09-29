@@ -44,6 +44,9 @@ export default function CommonButton({
           justifyContent: "center",
         },
         style,
+        disabled && {
+          opacity: 0.6,
+        },
       ]}
     >
       {/* Glow layer */}

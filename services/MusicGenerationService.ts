@@ -24,6 +24,7 @@ const OPEN_AI_API_KEY = process.env.EXPO_PUBLIC_OPEN_AI_API_KEY;
 const GROK_API_KEY = process.env.EXPO_PUBLIC_GROK_API_KEY;
 const CLAUDE_API_KEY = process.env.EXPO_PUBLIC_CLAUDE_API_KEY;
 const PPLX_API_KEY = process.env.EXPO_PUBLIC_PPLX_API_KEY;
+const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 const SUNO_API_KEY = process.env.EXPO_PUBLIC_SUNO_API_KEY;
 const SUNO_ORG_API_KEY = process.env.EXPO_PUBLIC_SUNO_ORG_API_KEY;
 const REPLICATE_API_KEY = process.env.EXPO_PUBLIC_REPLICATE_API_KEY;
@@ -96,15 +97,15 @@ async function generateWithProvider(
   prompt: string,
 ): Promise<LyricsResult | null> {
   switch (provider) {
-    case "CLAUDE":
-      return await generateWithClaude(prompt);
+    case "GEMINI":
+      return await generateWithGemini(prompt);
     case "GROK":
       return await generateWithGrok(prompt);
     case "OPEN_AI":
       return await generateWithOpenAi(prompt);
-    case "PERPLEXITY":
+    case "CLAUDE":
     default:
-      return await generateWithPerplexity(prompt);
+      return await generateWithClaude(prompt);
   }
 }
 
@@ -113,13 +114,16 @@ function extractLyrics(text: string): LyricsResult | null {
     const cleaned = (text || "").replace(/```json\n/, "").replace(/\n```$/, "");
     const parsed = JSON.parse(cleaned);
 
-    // const lyrics = Object.values(parsed.lyrics).join("\n\n");
-    const { verse1, chorus, verse2, outro } = parsed.lyrics;
+    const { verse1, pre_chorus, chorus, verse2, pre_chorus2, chorus2, outro } =
+      parsed.lyrics;
     const lyrics = [
-      `[Verse]\n${verse1}`,
-      `[Chorus]\n${chorus}`,
-      `[Verse]\n${verse2}`,
-      `[Outro]\n${outro}`,
+      verse1,
+      pre_chorus,
+      chorus,
+      verse2,
+      pre_chorus2,
+      chorus2,
+      outro,
     ].join("\n\n");
     const musicStyle = parsed?.musicStyle || "";
 
@@ -288,10 +292,116 @@ async function generateWithGrok(prompt: string): Promise<LyricsResult | null> {
       throw new Error(data.error?.message || "GROK failed to generate lyrics.");
     }
 
-    return extractLyrics(data?.output[0]?.content[0]?.text || "");
+    return extractLyrics(
+      (data?.output[0]?.content || data?.output[1]?.content)[0]?.text || "",
+    );
   } catch (error: any) {
     console.error(
       "An error occurred while generating lyrics with GROK:",
+      error?.message,
+    );
+    return null;
+  }
+}
+
+function sanitizeJsonControlChars(raw: string): string {
+  let result = "";
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < raw.length; i++) {
+    const char = raw[i];
+    const code = raw.charCodeAt(i);
+
+    if (inString) {
+      if (escaped) {
+        result += char;
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        result += char;
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        result += char;
+        inString = false;
+        continue;
+      }
+      if (code <= 0x1f) {
+        // Raw control char inside a string -> escape it
+        if (char === "\n") result += "\\n";
+        else if (char === "\r") result += "\\r";
+        else if (char === "\t") result += "\\t";
+        else result += "\\u" + code.toString(16).padStart(4, "0");
+        continue;
+      }
+      result += char;
+    } else {
+      if (char === '"') inString = true;
+      result += char;
+    }
+  }
+
+  return result;
+}
+async function generateWithGemini(
+  prompt: string,
+): Promise<LyricsResult | null> {
+  if (!GEMINI_API_KEY) {
+    Alert.alert(
+      "API Key Missing",
+      "Please set the GEMINI API key to generate lyrics.",
+    );
+    return null;
+  }
+
+  try {
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": GEMINI_API_KEY,
+        },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            maxOutputTokens: 1024,
+            // 2.5 models "think" by default and thinking tokens count toward
+            // maxOutputTokens, so turn it off to avoid truncated lyrics.
+            thinkingConfig: { thinkingBudget: 0 },
+          },
+        }),
+      },
+    );
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(
+        data.error?.message || "GEMINI failed to generate lyrics.",
+      );
+    }
+
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const cleaned = text
+      .trim()
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/```$/, "")
+      .trim();
+    if (!cleaned) {
+      throw new Error(
+        `GEMINI returned no text (finishReason: ${data?.candidates?.[0]?.finishReason ?? data?.promptFeedback?.blockReason ?? "unknown"})`,
+      );
+    }
+
+    return extractLyrics(sanitizeJsonControlChars(cleaned));
+  } catch (error: any) {
+    console.error(
+      "An error occurred while generating song lyrics with GEMINI:",
       error?.message,
     );
     return null;
@@ -550,6 +660,12 @@ async function pollSunoOrgStreamUrl(
           provider: "SUNO_ORG",
           songProviderPayload: payload,
         };
+
+        if (finalUrl.includes("tempfile.aiquickdraw")) {
+          setTimeout(() => {
+            notifyFinalReady(taskId, finalUrl);
+          }, 5000);
+        }
 
         return generatedSong;
       }
@@ -890,7 +1006,7 @@ export async function fetchJamendoTrack(
   }
 
   const playedIds = await getJamendoIdsOfEmotion(emotion);
-  const totalIds = ["1", "2", "3", "4", "5"]
+  const totalIds = ["1", "2", "3", "4", "5"];
   const nonPlayedIds = totalIds.filter((id) => !playedIds.includes(id));
 
   const randomId =
@@ -908,8 +1024,6 @@ export async function fetchJamendoTrack(
 
   return song;
 }
-
-
 
 // =================================================================
 // SHARED HELPER: Download & Save
@@ -938,7 +1052,6 @@ export async function downloadAndSaveAudio(
     provider: providerName,
   };
 }
-
 
 // const calculateJamendoTrackScore = (track: any) => {
 //   const stats = track?.stats;

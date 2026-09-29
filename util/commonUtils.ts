@@ -10,15 +10,15 @@ export const checkForParticipantEmail = (str: string): boolean => {
   // return regex.test(str);
 
   const lower = str.toLowerCase();
-  if (!lower.endsWith("@gmail.com")) return false;
+  // if (!lower.endsWith("@gmail.com")) return false;
 
-  const prefix = lower.replace("@gmail.com", "");
-  if (prefix.startsWith("test")) {
-    const num = Number(prefix.replace("test", ""));
+  // const prefix = lower.replace("@gmail.com", "");
+  if (lower.startsWith("test")) {
+    const num = Number(lower.replace("test", ""));
     return num >= 1 && num <= 5;
   }
-  if (prefix.startsWith("p")) {
-    const num = Number(prefix.slice(1));
+  if (lower.startsWith("p")) {
+    const num = Number(lower.slice(1));
     return num >= 1 && num <= 40;
   }
 
@@ -29,4 +29,8 @@ export function formaTrackDuration(ms: number): string {
   const mins = Math.floor(ms / 60000);
   const secs = Math.floor((ms % 60000) / 1000);
   return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
+export function capitalize(word: string): string {
+  return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
 }

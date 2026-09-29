@@ -20,6 +20,7 @@ import {
   KeyboardAvoidingView,
   StatusBar,
   Dimensions,
+  ActivityIndicator,
 } from "react-native";
 import Slider from "@react-native-community/slider";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -54,7 +55,7 @@ function VASlider({
             {
               left: bubbleLeft,
               backgroundColor: isSet ? "#C4417A" : "#2E2350",
-              borderColor: isSet ? "#C4417A" : "#4A3870",
+              borderColor: isSet ? "#C4417A" : "#74608e",
               opacity: isSet ? 1 : 0.4,
             },
           ]}
@@ -75,9 +76,9 @@ function VASlider({
         step={1}
         value={isSet ? value : 1}
         onValueChange={(v) => onChange(Math.round(v))}
-        minimumTrackTintColor={isSet ? "#C4417A" : "#4A3870"}
-        maximumTrackTintColor="#4A3870"
-        thumbTintColor={isSet ? "#C4417A" : "#4A3870"}
+        minimumTrackTintColor={isSet ? "#C4417A" : "#74608e"}
+        maximumTrackTintColor="#74608e"
+        thumbTintColor={isSet ? "#C4417A" : "#74608e"}
       />
 
       {/* Axis labels */}
@@ -130,7 +131,7 @@ const vaStyles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   axisLabel: {
-    color: "#4A3860",
+    color: "#957fb0",
     fontSize: 11,
   },
   axisValue: {
@@ -176,7 +177,8 @@ export default function FeedbackScreen() {
   const [arousal, setArousal] = useState(0);
   const [valence, setValence] = useState(0);
 
-  const [submitted, setSubmitted] = useState(false);
+  // const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.85)).current;
@@ -199,11 +201,12 @@ export default function FeedbackScreen() {
           speed: 12,
         }),
       ]).start();
-      setSubmitted(true);
+      // setSubmitted(true);
+      setLoading(true);
 
       const feedbackData = { arousal, valence, emotionState };
-
       await savePlaylistFeedback(feedbackData);
+
       if (!storeInDb) {
         await saveFeedbackSubmitted("pre", playlistIdx || 0);
       } else {
@@ -214,7 +217,11 @@ export default function FeedbackScreen() {
         });
         await saveFeedbackSubmitted("post", playlistIdx || 0);
       }
+
+      setLoading(false);
+      handleGoBack();
     } catch (err: any) {
+      setLoading(false);
       console.error("Error while saving session feedback in DB:", err?.message);
     }
   };
@@ -232,37 +239,37 @@ export default function FeedbackScreen() {
     setValence(70);
   };
 
-  if (submitted) {
-    return (
-      <SafeAreaView style={styles.root}>
-        <StatusBar barStyle="light-content" backgroundColor="#0D0818" />
-        <Animated.View
-          style={[
-            styles.successContainer,
-            { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
-          ]}
-        >
-          <Text style={styles.successEmoji}>🎉</Text>
-          <Text style={styles.successTitle}>Thank You!</Text>
-          <Text style={styles.successSub}>
-            Your feedback helps us tune{"\n"}every emotion perfectly.
-          </Text>
-          <View style={styles.successDots}>
-            {[0.3, 0.6, 1].map((op, i) => (
-              <View key={i} style={[styles.dot, { opacity: op }]} />
-            ))}
-          </View>
-          <TouchableOpacity
-            onPress={handleGoBack}
-            activeOpacity={0.75}
-            style={styles.goBackBtn}
-          >
-            <Text style={styles.goBackText}>← Go Back</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      </SafeAreaView>
-    );
-  }
+  // if (submitted) {
+  //   return (
+  //     <SafeAreaView style={styles.root}>
+  //       <StatusBar barStyle="light-content" backgroundColor="#0D0818" />
+  //       <Animated.View
+  //         style={[
+  //           styles.successContainer,
+  //           { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
+  //         ]}
+  //       >
+  //         <Text style={styles.successEmoji}>🎉</Text>
+  //         <Text style={styles.successTitle}>Thank You!</Text>
+  //         <Text style={styles.successSub}>
+  //           Your feedback helps us tune{"\n"}every emotion perfectly.
+  //         </Text>
+  //         <View style={styles.successDots}>
+  //           {[0.3, 0.6, 1].map((op, i) => (
+  //             <View key={i} style={[styles.dot, { opacity: op }]} />
+  //           ))}
+  //         </View>
+  //         <TouchableOpacity
+  //           onPress={handleGoBack}
+  //           activeOpacity={0.75}
+  //           style={styles.goBackBtn}
+  //         >
+  //           <Text style={styles.goBackText}>← Go Back</Text>
+  //         </TouchableOpacity>
+  //       </Animated.View>
+  //     </SafeAreaView>
+  //   );
+  // }
 
   return (
     <SafeAreaView style={styles.root}>
@@ -361,6 +368,7 @@ export default function FeedbackScreen() {
                 ? "Submit Feedback  ✦"
                 : "Please rate all the required sections"}
             </Text>
+            {loading && <ActivityIndicator color="#fff" size={30} />}
           </TouchableOpacity>
 
           {process.env?.EXPO_PUBLIC_APP_ENV === "development" && (
@@ -469,7 +477,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: 0.5,
   },
-  submitTextDisabled: { color: "#3D2F5A" },
+  submitTextDisabled: { color: "#5d4a75" },
   successContainer: {
     flex: 1,
     justifyContent: "center",

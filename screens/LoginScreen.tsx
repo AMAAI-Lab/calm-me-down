@@ -1,26 +1,26 @@
-import { useMemo, useState } from "react";
-import {
-  Text,
-  StyleSheet,
-  Pressable,
-  Alert,
-  ActivityIndicator,
-  ScrollView,
-  View,
-} from "react-native";
-import { FontAwesome5 } from "@expo/vector-icons";
-import EmotionInput from "../components/ui/emotion-input";
-import { useAuth } from "../context/AuthContext";
+import EmotionDropdown from "@/components/ui/emotion-dropdown";
 import {
   APP_VERSION,
   ARTISTS_BY_GENRE,
   GENRES,
   UserProfile,
 } from "@/constants/appConstants";
-import EmotionDropdown from "@/components/ui/emotion-dropdown";
-import { useNavigation } from "expo-router";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "@/navigation/RootNavigator";
+import { FontAwesome5 } from "@expo/vector-icons";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useNavigation } from "expo-router";
+import { useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import EmotionInput from "../components/ui/emotion-input";
+import { useAuth } from "../context/AuthContext";
 
 export default function LoginScreen() {
   const { login } = useAuth();
@@ -70,9 +70,10 @@ export default function LoginScreen() {
         if (v.trim().length < 1) {
           return "Please enter your email.";
         }
-        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
-          ? undefined
-          : "Please enter a valid email.";
+        return undefined
+        // return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
+        //   ? undefined
+        //   : "Please enter a valid email.";
       },
     },
     profession: {
@@ -216,7 +217,7 @@ export default function LoginScreen() {
     if (isP) {
       setForm({
         ...form,
-        email: "p37@gmail.com",
+        email: "p37",
       });
     } else {
       setForm({
@@ -290,7 +291,7 @@ export default function LoginScreen() {
       />
 
       <EmotionDropdown
-        label="Favorite genre"
+        label="Favorite genre (You may select multiple)"
         placeholder="Select a genre"
         icon={<FontAwesome5 name="music" size={16} color="#fff" />}
         value={form.favoriteGenre}
@@ -300,7 +301,7 @@ export default function LoginScreen() {
         error={touched.favoriteGenre ? errors.favoriteGenre : undefined}
       />
       <EmotionDropdown
-        label="Favorite artist / band"
+        label="Favorite artist / band (You may select multiple)"
         placeholder={
           form.favoriteGenre
             ? `Artists in ${form.favoriteGenre}`

@@ -11,7 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.sutd.geeta.emotionapp",
@@ -52,6 +54,7 @@
     },
     "plugins": [
       "expo-router",
+      
       [
         "expo-build-properties",
         {
@@ -73,7 +76,9 @@
         }
       ],
       "react-native-health-connect",
-      "expo-asset"
+      "expo-asset",
+      "expo-font",
+      "expo-web-browser"
     ],
     "extra": {
       "router": {},
