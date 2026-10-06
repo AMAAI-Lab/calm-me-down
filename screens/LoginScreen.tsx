@@ -272,9 +272,9 @@ export default function LoginScreen() {
         error={touched.age ? errors.age : undefined}
       />
       <EmotionInput
-        label="Email"
-        placeholder="e.g. alex@gmail.com"
-        icon={<FontAwesome5 name="envelope" size={16} color="#fff" />}
+        label="Participant ID"
+        placeholder="e.g. P1"
+        icon={<FontAwesome5 name="id-badge" size={16} color="#fff" />}
         value={form.email}
         onChange={(t) => handleChange("email", t)}
         error={touched.email ? errors.email : undefined}

@@ -79,6 +79,7 @@ function VASlider({
         minimumTrackTintColor={isSet ? "#C4417A" : "#74608e"}
         maximumTrackTintColor="#74608e"
         thumbTintColor={isSet ? "#C4417A" : "#74608e"}
+        tapToSeek={true}
       />
 
       {/* Axis labels */}

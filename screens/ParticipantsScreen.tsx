@@ -1433,7 +1433,6 @@ export default function ParticipantsScreen() {
       indicatorAnim.setValue(1);
     }
   }, [indicatorIcon]);
-  // }, [showMoodMeterButton, startEmotion, targetEmotion]);
 
   // Scroll the view towards lyrics container once the lyrics are ready
   useEffect(() => {
@@ -1543,14 +1542,14 @@ export default function ParticipantsScreen() {
         pointerEvents={isEmotionLocked ? "none" : "auto"}
       >
         <View style={{ flexDirection: "row", gap: 15 }}>
-          {indicatorIcon === "start" && (
+          {!isEmotionLocked && indicatorIcon === "start" && (
             <Animated.View
               style={{
                 opacity: indicatorAnim,
                 marginTop: 5,
                 transform: [
                   {
-                    scale: indicatorAnim
+                    scale: indicatorAnim,
                   },
                 ],
               }}
@@ -1598,14 +1597,14 @@ export default function ParticipantsScreen() {
       {/* Desired Emotion selection */}
       <View style={styles.section}>
         <View style={{ flexDirection: "row", gap: 15 }}>
-          {indicatorIcon === "target" && (
+          {!isLocked && indicatorIcon === "target" && (
             <Animated.View
               style={{
                 opacity: indicatorAnim,
                 marginTop: 5,
                 transform: [
                   {
-                    scale: indicatorAnim
+                    scale: indicatorAnim,
                   },
                 ],
               }}
@@ -1800,6 +1799,9 @@ export default function ParticipantsScreen() {
                 text={currentSongLyrics}
                 currentTimeMs={currentTime * 1000}
                 songDurationMs={(duration || DEFAULT_DURATION) * 1000}
+                alignedWords={currentSong?.alignedWords || []}
+                autoScroll={false}
+                highlightWords={true}
               />
             </View>
           )}

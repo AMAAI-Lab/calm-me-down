@@ -236,6 +236,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
     outlineWidth: 0,
+    width: "100%",
   },
   backdrop: {
     flex: 1,

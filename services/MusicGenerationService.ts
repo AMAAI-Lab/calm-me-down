@@ -37,6 +37,13 @@ const REPLICATE_API_URL = "https://api.replicate.com/v1/predictions";
 const REPLICATE_MODEL_VERSION =
   "7a76a8258b23fae65c5a22debb8841d1d7e816b75c2f24218cd2bd8573787906";
 
+export interface AlignedWord {
+  word: string;
+  success?: boolean;
+  startS: number;
+  endS: number;
+  palign?: number;
+}
 export type GeneratedSong = {
   id?: string;
   audioUrl: string;
@@ -46,6 +53,7 @@ export type GeneratedSong = {
   songProviderPayload?: object;
   lyrics?: string;
   mood?: string;
+  alignedWords?: AlignedWord[];
 };
 
 type FinalReadyListener = (taskId: string, url: string) => void;
@@ -584,6 +592,51 @@ function extractSunoOrgData(info: any) {
 
   return songList;
 }
+async function getSunoOrgTimestamps(taskId: string, audioId: string) {
+  try {
+    if (!taskId || !audioId) {
+      console.warn(
+        "Invalid Task ID or Audio ID to fetch Suno Org Timestamps: ",
+        { taskId, audioId },
+      );
+      return [];
+    }
+
+    const res = await fetch(
+      "https://api.sunoapi.org/api/v1/generate/get-timestamped-lyrics",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${SUNO_ORG_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ taskId, audioId }),
+      },
+    );
+
+    const json = await res.json();
+    if (json.code !== 200) {
+      console.warn(json?.msg || "Suno Org Timestamps response not OK!");
+      return [];
+    }
+
+    const alignedWords = json?.data?.alignedWords || [];
+    if (!alignedWords?.length) {
+      console.warn("Fetched Suno Org Timestamps are empty!");
+      return [];
+    } else {
+      console.log(
+        "=> Suno Org timestamps fetched successfully with length: ",
+        alignedWords.length,
+      );
+    }
+
+    return alignedWords as AlignedWord[];
+  } catch (err: any) {
+    console.warn("Error while fetching Suno Org timestamps: ", err?.message);
+    return [];
+  }
+}
 async function pollSunoOrgStreamUrl(
   taskId: string,
   mood: string,
@@ -623,6 +676,11 @@ async function pollSunoOrgStreamUrl(
           "returning SUNO_ORG stream url: ",
           streamable.streamAudioUrl,
         );
+
+        const alignedWords = await getSunoOrgTimestamps(
+          taskId,
+          streamable?.id || "",
+        );
         const generatedSong: GeneratedSong = {
           id: taskId,
           audioUrl: streamable.streamAudioUrl,
@@ -630,6 +688,7 @@ async function pollSunoOrgStreamUrl(
           duration: 30,
           provider: "SUNO_ORG",
           songProviderPayload: payload,
+          alignedWords,
         };
 
         // Continue polling in background
@@ -649,9 +708,13 @@ async function pollSunoOrgStreamUrl(
         const finalUrl = validSong.audioUrl || validSong.audio_url;
         console.log(
           "Suno Org Final MP3 Ready even before TEXT_SUCCESS:",
-          finalUrl,
+          finalUrl, validSong
         );
 
+        const alignedWords = await getSunoOrgTimestamps(
+          taskId,
+          validSong?.id || "",
+        );
         const generatedSong: GeneratedSong = {
           id: taskId,
           audioUrl: finalUrl,
@@ -659,6 +722,7 @@ async function pollSunoOrgStreamUrl(
           duration: 30,
           provider: "SUNO_ORG",
           songProviderPayload: payload,
+          alignedWords,
         };
 
         if (finalUrl.includes("tempfile.aiquickdraw")) {
