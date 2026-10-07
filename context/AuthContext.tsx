@@ -1,5 +1,9 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { getUserLocal, saveUserLocal } from "../services/LocalUserService";
+import {
+  clearStoredGenres,
+  getUserLocal,
+  saveUserLocal,
+} from "../services/LocalUserService";
 import { UserProfile } from "@/constants/appConstants";
 import { saveUserInDB } from "@/services/DbService";
 import { checkForParticipantEmail } from "@/util/commonUtils";
@@ -32,7 +36,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     })();
   }, []);
 
-  const login = async (userData: UserProfile) : Promise<boolean> => {
+  const login = async (userData: UserProfile): Promise<boolean> => {
     await saveUserInDB(userData);
     await saveUserLocal(userData);
     setUser(userData);
@@ -40,7 +44,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const isParticipantEmail = checkForParticipantEmail(userData?.email || "");
     setIsParticipant(isParticipantEmail);
 
-    return isParticipantEmail
+    await clearStoredGenres();
+    return isParticipantEmail;
   };
 
   const logout = async () => {

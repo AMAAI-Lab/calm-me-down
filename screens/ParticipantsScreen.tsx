@@ -8,7 +8,6 @@ import React, {
 import {
   ActivityIndicator,
   Animated,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -67,6 +66,7 @@ import {
   FeedbackSubmittedStatus,
   getFeedbackSubmitted,
   getPlaylistFeedback,
+  getRandomGenres,
   getSessionId,
   getTrackId,
   getTrajectoryId,
@@ -94,10 +94,10 @@ import {
 import LyricAnimator from "@/components/ui/lyric-animator";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Location from "expo-location";
-import { shareLogs, viewLogs } from "@/services/LoggerService";
 import LoadingPhrases from "@/components/ui/loading-phrases";
 import { buildEmotionPath } from "@/services/EmotionPathService";
 import EmotionGrid from "@/components/ui/emotion-grid";
+import DebugOptionsModal from "@/components/ui/debug-options-modal";
 
 type TargetEmotion = "relaxed" | "joyful";
 type PlaylistType = "Trajectory" | "SavedPlaylist";
@@ -168,11 +168,12 @@ function pickSequence(target: TargetEmotion): PlaylistId[] {
 
 export default function ParticipantsScreen() {
   const insets = useSafeAreaInsets();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const navigation = useNavigation();
 
   const [phase, setPhase] = useState<Phase>("setup");
   const [startEmotion, setStartEmotion] = useState<string>("");
+  const [cuurentEmotion, setCurrentEmotion] = useState<string>("");
   const [targetEmotion, setTargetEmotion] = useState<TargetEmotion | null>(
     null,
   );
@@ -184,7 +185,6 @@ export default function ParticipantsScreen() {
 
   // const [isPreFeedbackMessage, setIsPreFeedbackMessage] = useState(true);
   // const [showEmotionModal, setShowEmotionModal] = useState(false);
-  const [debugModalVisible, setDebugModalVisible] = useState(false);
   const [songJustFinished, setSongJustFinished] = useState(false);
   const [nextSongLoading, setNextSongLoading] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -383,7 +383,11 @@ export default function ParticipantsScreen() {
     }
   };
 
-  const buildLyricsPrompt = async (mood: string, healthData: HealthData) => {
+  const buildLyricsPrompt = async (
+    mood: string,
+    healthData: HealthData,
+    favGenre: string,
+  ) => {
     const isHrValid = !!healthData.heartRate;
     const isStepsValid = !!healthData.steps;
 
@@ -392,6 +396,9 @@ export default function ParticipantsScreen() {
     const activityContext =
       currentActivity === "Walking Outside" ? "Walking" : "Sitting";
     const about = ADD_ABOUT_TO_PROMPT && user?.about?.trim();
+    const newsHeadlines = (news?.headline || [])
+      .map((h, i) => `  ${i + 1}. "${h}"`)
+      .join("\n");
 
     const preventRepetition = REPETITIVE_CHECK_IN_PROMPT;
     const repetitionRules = `
@@ -486,7 +493,7 @@ export default function ParticipantsScreen() {
       ${about ? `- About: ${about}` : ""}
 
       MUSIC STYLE
-      - Genre preference: ${user?.favoriteGenre}
+      - Genre preference: ${favGenre || user?.favoriteGenre}
       - Stylistic influence (do NOT imitate or quote): ${user?.favoriteBand}
       - mood: ${mood}
 
@@ -498,13 +505,14 @@ export default function ParticipantsScreen() {
       ENVIRONMENT
       - Location: ${weather?.city || "Unknown"}
       - Weather: ${weather?.temperature ? `${weather.temperature}°C, ${weather.description}` : "Unknown"}
-      - Optional news inspiration (use only if emotionally relevant): ${news?.headline || "N/A"}
+      - Optional news inspiration (pick at most one if emotionally relevant, ignore the rest):
+      ${newsHeadlines}
 
       ${preventRepetition ? `${repetitionRules}` : ""}
 
       TASK:
       Write cohesive song lyrics.
-      1. Structure: Verse 1, Pre-Chorus, Chorus, Verse 2, Pre-Chorus, Chorus, Outro.
+      1. Structure: Verse 1, Pre-Chorus, Chorus, Verse 2, Pre-Chorus, Outro.
       2. Line count (STRICT): Verse = 4 lines, Pre-Chorus = 2 lines, Chorus = 4 lines, Outro = 3 lines. Total: 23 lines.
       3. Line length: Each line must be 6–10 words. No long run-on lines.
       4. Tone: ${mood} and emotionally grounded.
@@ -547,7 +555,6 @@ export default function ParticipantsScreen() {
           "chorus": "line1\nline2\nline3\nline4",
           "verse2": "line1\nline2\nline3\nline4",
           "pre_chorus2": "line1\nline2",
-          "chorus2": "line1\nline2\nline3\nline4",
           "outro": "line1\nline2\nline3"
         },
         "musicStyle": "short suno-style descriptor here"
@@ -593,9 +600,11 @@ export default function ParticipantsScreen() {
         ? healthData
         : DEFAULT_HEALTH_DATA;
 
+    const favGenre = await getRandomGenres(user?.favoriteGenre || "");
     const prompt = await buildLyricsPrompt(
       startEmotion || "Relaxed",
       currHealthData,
+      favGenre,
     );
 
     // Generate song lyrics
@@ -628,13 +637,14 @@ export default function ParticipantsScreen() {
       startEmotion || "relaxed",
       currHealthData.heartRate || 0,
     );
+
     try {
       const generatedSong = await generateSong(
         currentLyrics || "Uplifting song",
-        suggestedMusicStyle || user?.favoriteGenre || "Pop, Classical",
+        suggestedMusicStyle || favGenre || "Pop, Classical",
         startEmotion || "Relaxed",
         currentSongIndex,
-        user?.favoriteGenre,
+        favGenre || user?.favoriteGenre,
         user?.favoriteBand,
         tempoRange,
       );
@@ -897,7 +907,12 @@ export default function ParticipantsScreen() {
     console.log("HR for next song: ", latestHealthData.heartRate);
     console.log("Steps for next song: ", latestHealthData.steps);
 
-    const prompt = await buildLyricsPrompt(currentMood, latestHealthData);
+    const favGenre = await getRandomGenres(user?.favoriteGenre || "");
+    const prompt = await buildLyricsPrompt(
+      currentMood,
+      latestHealthData,
+      favGenre,
+    );
 
     // Generate song lyrics
     let currentLyrics = "";
@@ -931,10 +946,10 @@ export default function ParticipantsScreen() {
     try {
       const generatedSong = await generateSong(
         currentLyrics || "Uplifting song",
-        suggestedMusicStyle || user?.favoriteGenre || "N/A",
+        suggestedMusicStyle || favGenre || user?.favoriteGenre || "N/A",
         currentMood,
         nextSongIdx,
-        user?.favoriteGenre,
+        favGenre || user?.favoriteGenre,
         user?.favoriteBand,
         tempoRange,
       );
@@ -1105,6 +1120,7 @@ export default function ParticipantsScreen() {
 
   const handleStartEmotion = async (emotion: string) => {
     setStartEmotion(emotion);
+    setCurrentEmotion(emotion);
 
     const currPlaylistEC = emotionCaptured?.[playlistIdx] || {
       pre: false,
@@ -1156,13 +1172,6 @@ export default function ParticipantsScreen() {
       });
     }
   };
-
-  const handleLogout = () => {
-    logout();
-    navigation.navigate("Login" as never);
-  };
-
-  const closeDebugModal = () => setDebugModalVisible(false);
 
   // Fetch news and weather info
   useEffect(() => {
@@ -1666,7 +1675,7 @@ export default function ParticipantsScreen() {
               }}
             >
               <Text style={{ color: C.text, fontSize: 15, opacity: 0.9 }}>
-                Trajectory Number:
+                Playlist Number:
               </Text>
               <Text style={styles.sectionTitle}>{playlistIdx + 1}</Text>
             </View>
@@ -1720,13 +1729,14 @@ export default function ParticipantsScreen() {
       )}
 
       {/* Music journey and Fav Genre labels */}
-      {((startEmotion && targetEmotion) || user?.favoriteGenre) && (
+      {((cuurentEmotion && targetEmotion) || user?.favoriteGenre) && (
         <View style={styles.sectionContainer}>
-          {startEmotion && targetEmotion && (
+          {cuurentEmotion && targetEmotion && (
             <View
               style={{
                 flexDirection: "row",
                 gap: 5,
+                alignItems: "center",
               }}
             >
               <Text style={{ color: C.text, fontSize: 14, opacity: 0.9 }}>
@@ -1743,7 +1753,7 @@ export default function ParticipantsScreen() {
                 }}
               >
                 <Text style={{ color: "#fff", fontSize: 14, fontWeight: 800 }}>
-                  {capitalize(startEmotion)}
+                  {capitalize(cuurentEmotion)}
                 </Text>
 
                 <FontAwesome5
@@ -1817,7 +1827,8 @@ export default function ParticipantsScreen() {
                 textAlign: "center",
               }}
             >
-              🎵 {currentSong.title}
+              {/* 🎵 {currentSong.title} */}
+              🎵 Your Personalized Song {currentSongIndex + 1}
             </Text>
           )}
 
@@ -2022,94 +2033,11 @@ export default function ParticipantsScreen() {
         onClose={() => setShowEmotionModal(false)}
       /> */}
 
-      {/* Debug options */}
-      <Pressable
-        style={styles.optionsTrigger}
-        onPress={() => setDebugModalVisible(true)}
-      >
-        <FontAwesome5 name="ellipsis-h" size={25} color="#fff" />
-      </Pressable>
-      {debugModalVisible && (
-        <Modal
-          visible={debugModalVisible}
-          transparent
-          animationType="slide"
-          onRequestClose={closeDebugModal}
-        >
-          {/* Backdrop */}
-          <Pressable style={styles.backdrop} onPress={closeDebugModal} />
-
-          <View style={styles.sheet}>
-            <View style={styles.handle} />
-
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <Text style={styles.sheetTitle}>Debug Options</Text>
-              <CommonButton
-                onPress={closeDebugModal}
-                icon={<FontAwesome5 name="times" size={22} color="#fff" />}
-              />
-            </View>
-
-            {/* Logout */}
-            <View style={[styles.row, { opacity: 0.8, marginBottom: -20 }]}>
-              <Text style={styles.rowLabel}>Logout</Text>
-              <CommonButton
-                onPress={() => {
-                  closeDebugModal();
-                  handleLogout();
-                }}
-                icon={
-                  <FontAwesome5 name="sign-out-alt" size={18} color="#fff" />
-                }
-              />
-            </View>
-
-            {/* Reset current playlist */}
-            <View style={[styles.row, { opacity: 0.8, marginBottom: -20 }]}>
-              <Text style={styles.rowLabel}>Reset current playlist</Text>
-              <CommonButton
-                onPress={() => {
-                  closeDebugModal();
-                  clearStates(true);
-                }}
-                icon={<FontAwesome5 name="redo" size={18} color="#fff" />}
-                disabled={!songQueue?.length}
-              />
-            </View>
-
-            {/* View / Share logs */}
-            <View style={[styles.row, { opacity: 0.8 }]}>
-              <Text style={styles.rowLabel}>View logs</Text>
-              <CommonButton
-                onPress={viewLogs}
-                icon={<FontAwesome5 name="eye" size={22} color="#fff" />}
-              />
-              <Text style={[styles.rowLabel, { marginLeft: 15 }]}>
-                Share logs
-              </Text>
-              <CommonButton
-                onPress={shareLogs}
-                icon={<FontAwesome5 name="share" size={22} color="#fff" />}
-              />
-            </View>
-
-            {/* Debug-only Mood meter btn */}
-            {DEBUG_MODE && (
-              <Pressable onPress={handleNavigate} style={styles.debugBtn}>
-                <Text style={styles.debugBtnText}>
-                  Update mood meter (Test)
-                </Text>
-              </Pressable>
-            )}
-          </View>
-        </Modal>
-      )}
+      {/* Debug options modal */}
+      <DebugOptionsModal
+        clearStates={() => clearStates(true)}
+        songQueueLen={songQueue.length}
+      />
 
       {/* App version */}
       <View
@@ -2226,61 +2154,5 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     paddingHorizontal: 15,
     paddingVertical: 10,
-  },
-
-  // debug modal styles
-  optionsTrigger: {
-    alignSelf: "center",
-    marginTop: 70,
-    opacity: 0.5,
-    padding: 10,
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  sheet: {
-    backgroundColor: "#190d2d",
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 30,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    marginBottom: 15,
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#ece5e5",
-    opacity: 0.3,
-    alignSelf: "center",
-    marginBottom: 12,
-  },
-  sheetTitle: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  rowLabel: {
-    color: "#ece5e5",
-    fontSize: 13,
-  },
-  debugBtn: {
-    borderWidth: 1,
-    borderColor: "#B07FE0",
-    backgroundColor: "#1E1235",
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  debugBtnText: {
-    color: "#B07FE0",
-    fontSize: 16,
   },
 });

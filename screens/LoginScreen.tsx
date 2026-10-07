@@ -68,9 +68,10 @@ export default function LoginScreen() {
       required: true,
       validate: (v) => {
         if (v.trim().length < 1) {
-          return "Please enter your email.";
+          // return "Please enter your email.";
+          return "Please enter your participant id.";
         }
-        return undefined
+        return undefined;
         // return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
         //   ? undefined
         //   : "Please enter a valid email.";
@@ -284,7 +285,7 @@ export default function LoginScreen() {
         label="About you (optional)"
         placeholder="e.g. I love late night drives, rainy days and indie films..."
         icon={<FontAwesome5 name="feather-alt" size={16} color="#fff" />}
-        value={form?.about || ''}
+        value={form?.about || ""}
         onChange={(t) => handleChange("about", t)}
         hint="A line about yourself helps personalize your lyrics."
         numberOfLines={5}

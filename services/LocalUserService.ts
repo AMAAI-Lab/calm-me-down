@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { AI_TRAJECTORY_LENGTH, UserProfile } from "@/constants/appConstants";
+import { UserProfile } from "@/constants/appConstants";
 
 const USER_KEY = "@user_profile";
 const SESSION_KEY = "@session_id";
@@ -11,6 +11,7 @@ const PRE_GEN_PLAYLIST_KEY = "@pre_gen_playlist";
 const VOCAL_GENDER_COUNTS_KEY = "@vocal_gender_counts";
 const APPLE_HEALTH_AUTH_KEY = "@apple_health_authorized";
 const JAMENDO_PLAYLIST_KEY = "@jamendo_playlist";
+const USED_GENRES_KEY = "@used_genres";
 
 export interface FeedbackSubmittedStatus {
   pre: boolean;
@@ -155,16 +156,16 @@ export const clearPgpIds = async () => {
 export const getVocalGender = async (): Promise<string> => {
   const raw = await AsyncStorage.getItem(VOCAL_GENDER_COUNTS_KEY);
   const vocals = raw ? JSON.parse(raw) : [];
-  const length = vocals?.length || 0
+  const length = vocals?.length || 0;
 
   let vocal;
   if (!length) {
     vocal = Math.random() < 0.5 ? "m" : "f";
   } else {
-    vocal = vocals[length - 1] === "m" ? "f" : "m"
+    vocal = vocals[length - 1] === "m" ? "f" : "m";
   }
 
-  const newVocals = [...vocals, vocal]
+  const newVocals = [...vocals, vocal];
   await AsyncStorage.setItem(
     VOCAL_GENDER_COUNTS_KEY,
     JSON.stringify(newVocals),
@@ -211,4 +212,72 @@ export const getJamendoIdsOfEmotion = async (
 };
 export const clearJamendoIds = async () => {
   await AsyncStorage.removeItem(JAMENDO_PLAYLIST_KEY);
+};
+
+// Methods to fetch unique genres
+const getRandomItems = (items: string[], count: number): string[] => {
+  const shuffled = [...items].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+};
+export const getRandomGenres = async (favGenre: string): Promise<string> => {
+  const genres = favGenre
+    .split(",")
+    .map((genre) => genre.trim())
+    .filter(Boolean);
+
+  // If 1 or 2 genres are provided, return as-is
+  if (genres.length <= 2) {
+    return genres.join(", ");
+  }
+
+  const storedUsedGenres = await AsyncStorage.getItem(USED_GENRES_KEY);
+  let usedGenres: string[] = storedUsedGenres
+    ? JSON.parse(storedUsedGenres)
+    : [];
+
+  // Only keep genres that still exist in favGenre
+  usedGenres = usedGenres.filter((genre) => genres.includes(genre));
+
+  let availableGenres = genres.filter((genre) => !usedGenres.includes(genre));
+  let selectedGenres: string[] = [];
+
+  // Normal case: 2 or more unused genres
+  if (availableGenres.length >= 2) {
+    selectedGenres = getRandomItems(availableGenres, 2);
+    usedGenres = [...usedGenres, ...selectedGenres];
+  } else {
+    // One or zero unused genres remain.
+    const remainingGenre = availableGenres[0];
+
+    // The most recently selected genre
+    const lastSelectedGenre =
+      usedGenres.length > 0 ? usedGenres[usedGenres.length - 1] : null;
+
+    // Reset used genres
+    usedGenres = remainingGenre ? [remainingGenre] : [];
+
+    // Pick another genre, avoiding the remaining/current genre
+    const otherGenres = genres.filter(
+      (genre) => genre !== remainingGenre && genre !== lastSelectedGenre,
+    );
+
+    if (remainingGenre) {
+      const randomOther =
+        otherGenres[Math.floor(Math.random() * otherGenres.length)];
+
+      selectedGenres = randomOther
+        ? [remainingGenre, randomOther]
+        : [remainingGenre];
+    } else {
+      // Everything was already used, so start a new cycle
+      selectedGenres = getRandomItems(genres, 2);
+      usedGenres = [...selectedGenres];
+    }
+  }
+
+  await AsyncStorage.setItem(USED_GENRES_KEY, JSON.stringify(usedGenres));
+  return selectedGenres.join(", ");
+};
+export const clearStoredGenres = async () => {
+  await AsyncStorage.removeItem(USED_GENRES_KEY);
 };

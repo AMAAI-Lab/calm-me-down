@@ -72,7 +72,7 @@ export async function fetchNewsData(
 
     if (data?.articles?.length) {
       return {
-        headline: data.articles[0].title,
+        headline: [data.articles[0].title],
         source: data.articles[0].source.name,
       };
     } else {
@@ -206,15 +206,19 @@ export async function fetchUniqueNewsData(
       return await fetchNewsData(countryCode);
     }
 
-    const randomIndex = Math.floor(Math.random() * validArticles.length);
-    const article = validArticles[randomIndex];
+    // const randomIndex = Math.floor(Math.random() * validArticles.length);
+    // const article = validArticles[randomIndex];
+    // @ts-ignore
+    const headlines = validArticles.slice(0, 4).map((a) => a.title);
 
     return {
-      headline: article.title,
-      source: article.source.name,
+      // headline: article.title,
+      headline: headlines,
+      // source: article.source.name,
+      source: validArticles[0]?.source?.name,
     };
   } catch (error: any) {
-    console.error(
+    console.warn(
       "Error fetching different topics news:",
       error?.message || error,
     );

@@ -9,7 +9,6 @@ import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,13 +17,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import CommonButton from "../components/ui/common-button";
-import EmotionDropdown from "../components/ui/emotion-dropdown";
 import EmotionInput from "../components/ui/emotion-input";
 import HealthProviderSection from "../components/ui/health-provider";
 import {
   CONTINUOUS_PLAYBACK_MS,
   DEBUG_MODE,
-  EMOTION_OPTIONS,
   HealthProvider,
   HRV_APP_VERSION,
   LISTEN_BEFORE_GENERATE_MS,
@@ -45,7 +42,6 @@ import {
   fetchHealthConnectData,
   HealthData,
 } from "../services/HealthService";
-import { shareLogs, viewLogs } from "../services/LoggerService";
 import {
   downloadAndSaveAudio,
   GeneratedSong,
@@ -71,15 +67,17 @@ import LyricAnimator from "@/components/ui/lyric-animator";
 import { formatTime } from "@/util/commonUtils";
 import Biomarkers from "@/components/ui/biomarkers";
 import * as Location from "expo-location";
-import { useNavigation } from "expo-router";
+import DebugOptionsModal from "@/components/ui/debug-options-modal";
+import {
+  EmotionPicker,
+  EmotionSelection,
+} from "@/components/ui/emotion-picker";
 
 const DEFAULT_DURATION = 150;
 
 export default function HomeScreen() {
   const authContext = useAuth();
-  const logout = authContext.logout;
   const user = authContext.user as UserProfile;
-  const navigation = useNavigation();
 
   const [input, setInput] = useState<UserInput>({
     currentMood: "",
@@ -95,6 +93,13 @@ export default function HomeScreen() {
   const [generatingLyrics, setGeneratingLyrics] = useState(false);
   const [generatingSong, setGeneratingSong] = useState(false);
   const [lyricPrompt, setLyricPrompt] = useState("");
+
+  const [currentEmotion, setCurrentEmotion] = useState<EmotionSelection | null>(
+    null,
+  );
+  const [desiredEmotion, setDesiredEmotion] = useState<EmotionSelection | null>(
+    null,
+  );
 
   const [emotionPath, setEmotionPath] = useState<string[]>([]);
   const [songQueue, setSongQueue] = useState<GeneratedSong[]>([]);
@@ -288,7 +293,7 @@ export default function HomeScreen() {
         ENVIRONMENT
         - Location: ${weather?.city || "Unknown"}
         - Weather: ${weather?.temperature ? `${weather.temperature}°C, ${weather.description}` : "Unknown"}
-        - News mood cue (optional): ${news?.headline || "N/A"}
+        - News mood cue (optional): ${news?.headline?.[0] || "N/A"}
 
         TASK:
         Write cohesive song lyrics.
@@ -569,7 +574,7 @@ export default function HomeScreen() {
         ENVIRONMENT
         - Location: ${weather?.city || "Unknown"}
         - Weather: ${weather?.temperature ? `${weather.temperature}°C, ${weather.description}` : "Unknown"}
-        - News mood cue (optional): ${news?.headline || "N/A"}
+        - News mood cue (optional): ${news?.headline?.[0] || "N/A"}
 
         TASK:
         Write cohesive song lyrics.
@@ -680,18 +685,6 @@ export default function HomeScreen() {
     }
   };
 
-  const checkEnvVars = () => {
-    const ENV = {
-      CLAUDE_API_KEY: process.env.EXPO_PUBLIC_CLAUDE_API_KEY,
-      OPENWEATHER_API_KEY: process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY,
-    };
-    const { CLAUDE_API_KEY, OPENWEATHER_API_KEY } = ENV;
-    Alert.alert(
-      "ENV Variables:",
-      `-> OPENWEATHER_API_KEY : ${OPENWEATHER_API_KEY} -> CLAUDE_API_KEY: ${CLAUDE_API_KEY}`,
-    );
-  };
-
   const fetchWeatherAndNews = async (
     firstCall: boolean = false,
   ): Promise<{ weather: WeatherData | null; news: NewsData | null } | null> => {
@@ -717,11 +710,6 @@ export default function HomeScreen() {
     setNewsData(news);
 
     return { weather, news };
-  };
-
-  const handleLogout = () => {
-    logout();
-    navigation.navigate("Login" as never);
   };
 
   useEffect(() => {
@@ -900,7 +888,7 @@ export default function HomeScreen() {
       >
         <Text style={styles.header}>Emotion to Lyric Generator</Text>
 
-        <EmotionDropdown
+        {/* <EmotionDropdown
           label={
             user?.nickName
               ? `Hi ${user.nickName}, how are you feeling today?`
@@ -919,7 +907,32 @@ export default function HomeScreen() {
           moods={EMOTION_OPTIONS}
           icon={<FontAwesome5 name="bolt" size={16} color="#fff" />}
           onChange={(t) => handleInputChange("desiredMood", t)}
+        /> */}
+
+        {/* TODO 
+          - update value and onChange props correctly
+        */}
+        <EmotionPicker
+          label="How are you feeling today?"
+          placeholderIcon="🎙️"
+          placeholder="Sad, Calm, Mysterious, Tense..."
+          // value={input.currentMood}
+          // onChange={(t) => handleInputChange("currentMood", t)}
+          value={currentEmotion}
+          onChange={setCurrentEmotion}
+          allowCustomEmotion
         />
+        <EmotionPicker
+          label="How would you like to feel?"
+          placeholderIcon="⚡"
+          placeholder="Joyful, Excited, Cheerful, Energetic..."
+          // value={input.desiredMood}
+          // onChange={(t) => handleInputChange("desiredMood", t)}
+          value={desiredEmotion}
+          onChange={setDesiredEmotion}
+          allowedQuadrants={["sunny", "breezy"]}
+        />
+
         <EmotionInput
           label="Are you starting some activity?"
           placeholder="Workout, Walking, Studying, Meditating..."
@@ -1066,51 +1079,9 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        <View
-          style={{
-            marginTop: 20,
-            opacity: 0.5,
-            display: "flex",
-            flexDirection: "row",
-            alignItems: "center",
-          }}
-        >
-          <Text style={{ color: "#ece5e5", fontSize: 12 }}>
-            Verify API keys
-          </Text>
-          <CommonButton
-            onPress={checkEnvVars}
-            icon={<FontAwesome5 name="question" size={22} color="#fff" />}
-          />
-          <Text style={{ color: "#ece5e5", fontSize: 12 }}>Logout</Text>
-          <CommonButton
-            onPress={handleLogout}
-            icon={<FontAwesome5 name="sign-out-alt" size={22} color="#fff" />}
-          />
-        </View>
+        {/* Debug options modal */}
+        <DebugOptionsModal isHomeScreen={true} />
 
-        <View
-          style={{
-            marginTop: 20,
-            opacity: 0.5,
-            display: "flex",
-            flexDirection: "row",
-            alignItems: "center",
-          }}
-        >
-          <Text style={{ color: "#ece5e5", fontSize: 12 }}>View logs</Text>
-          <CommonButton
-            onPress={viewLogs}
-            icon={<FontAwesome5 name="eye" size={22} color="#fff" />}
-          />
-          <Text style={{ color: "#ece5e5", fontSize: 12, marginLeft: 5 }}>
-            Share logs
-          </Text>
-          <CommonButton
-            onPress={shareLogs}
-            icon={<FontAwesome5 name="share" size={22} color="#fff" />}
-          />
-        </View>
         {songQueue?.length ? (
           <View style={{ marginTop: 20, opacity: 0.5 }}>
             {/* <Text style={{ color: "#ece5e5", fontSize: 12 }}>
@@ -1214,7 +1185,7 @@ function buildLyricPrompt({
     ENVIRONMENT
     - Location: ${weatherData?.city || "Unknown"}
     - Weather: ${weatherData?.temperature ? `${weatherData.temperature}°C, ${weatherData.description}` : "Unknown"}
-    - News mood cue (optional): ${newsData?.headline || "N/A"}
+    - News mood cue (optional): ${newsData?.headline?.[0] || "N/A"}
 
     TASK:
     Write cohesive song lyrics.

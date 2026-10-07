@@ -37,7 +37,7 @@ export interface LyricsResult {
   musicStyle: string;
 }
 
-export const APP_VERSION = 14
+export const APP_VERSION = 15
 export const DEBUG_MODE = false;
 export const LISTEN_BEFORE_GENERATE_MS = 2000;
 export const CONTINUOUS_PLAYBACK_MS = 5000;
@@ -1461,5 +1461,35 @@ export const JAMENDO_PLAYLIST = {
   ],
 };
 
-      
+export type QuadrantKey = "sunny" | "stormy" | "rainy" | "breezy";
+export const ALL_QUADRANTS: QuadrantKey[] = ["sunny", "stormy", "rainy", "breezy"];
+export const EMOTION_PICKER_QUADRANTS: Record<
+  QuadrantKey,
+  { label: string; subtitle: string; emoji: string; bg: string }
+> = {
+  sunny: {
+    label: "Sunny",
+    subtitle: "Bright & energized",
+    emoji: "☀️",
+    bg: "#3e8f52",
+  },
+  stormy: {
+    label: "Stormy",
+    subtitle: "Charged & heavy",
+    emoji: "⛈️",
+    bg: "#b5394a",
+  },
+  rainy: {
+    label: "Rainy",
+    subtitle: "Low & quiet",
+    emoji: "🌧️",
+    bg: "#6b6485",
+  },
+  breezy: {
+    label: "Breezy",
+    subtitle: "Calm & light",
+    emoji: "🌤️",
+    bg: "#2c8c7c",
+  },
+};  
       

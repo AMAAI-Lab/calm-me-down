@@ -122,7 +122,7 @@ function extractLyrics(text: string): LyricsResult | null {
     const cleaned = (text || "").replace(/```json\n/, "").replace(/\n```$/, "");
     const parsed = JSON.parse(cleaned);
 
-    const { verse1, pre_chorus, chorus, verse2, pre_chorus2, chorus2, outro } =
+    const { verse1, pre_chorus, chorus, verse2, pre_chorus2, outro } =
       parsed.lyrics;
     const lyrics = [
       verse1,
@@ -130,7 +130,6 @@ function extractLyrics(text: string): LyricsResult | null {
       chorus,
       verse2,
       pre_chorus2,
-      chorus2,
       outro,
     ].join("\n\n");
     const musicStyle = parsed?.musicStyle || "";
@@ -601,6 +600,10 @@ async function getSunoOrgTimestamps(taskId: string, audioId: string) {
       );
       return [];
     }
+    console.log("=> SUNO_ORG timestamps start generaing for:", {
+      taskId,
+      audioId,
+    });
 
     const res = await fetch(
       "https://api.sunoapi.org/api/v1/generate/get-timestamped-lyrics",
@@ -616,7 +619,7 @@ async function getSunoOrgTimestamps(taskId: string, audioId: string) {
 
     const json = await res.json();
     if (json.code !== 200) {
-      console.warn(json?.msg || "Suno Org Timestamps response not OK!");
+      console.warn("Suno Org Timestamps response not OK: ", json?.msg);
       return [];
     }
 
@@ -624,12 +627,11 @@ async function getSunoOrgTimestamps(taskId: string, audioId: string) {
     if (!alignedWords?.length) {
       console.warn("Fetched Suno Org Timestamps are empty!");
       return [];
-    } else {
-      console.log(
-        "=> Suno Org timestamps fetched successfully with length: ",
-        alignedWords.length,
-      );
     }
+    console.log(
+      "=> Suno Org timestamps fetched successfully with length: ",
+      alignedWords.length,
+    );
 
     return alignedWords as AlignedWord[];
   } catch (err: any) {
@@ -708,7 +710,7 @@ async function pollSunoOrgStreamUrl(
         const finalUrl = validSong.audioUrl || validSong.audio_url;
         console.log(
           "Suno Org Final MP3 Ready even before TEXT_SUCCESS:",
-          finalUrl, validSong
+          finalUrl,
         );
 
         const alignedWords = await getSunoOrgTimestamps(
