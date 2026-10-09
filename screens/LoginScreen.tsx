@@ -242,7 +242,7 @@ export default function LoginScreen() {
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.header}>Emotion to Lyric Generator 🎧</Text>
+      <Text style={styles.header}>Emotion to Song Generator 🎧</Text>
 
       <EmotionInput
         label="Nickname (optional)"
@@ -273,8 +273,8 @@ export default function LoginScreen() {
         error={touched.age ? errors.age : undefined}
       />
       <EmotionInput
-        label="Participant ID"
-        placeholder="e.g. P1"
+        label="Participant ID / Email"
+        placeholder="e.g. P1 / alex@gmail.com"
         icon={<FontAwesome5 name="id-badge" size={16} color="#fff" />}
         value={form.email}
         onChange={(t) => handleChange("email", t)}

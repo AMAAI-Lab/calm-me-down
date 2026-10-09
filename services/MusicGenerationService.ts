@@ -1,5 +1,3 @@
-import { documentDirectory, downloadAsync } from "expo-file-system/legacy";
-import { Alert } from "react-native";
 import {
   CURRENT_LYRICS_PROVIDER,
   CURRENT_SONG_PROVIDER,
@@ -11,6 +9,8 @@ import {
   PRE_GENERATED_PLAYLIST,
   SUNO_ORG_PAYLOAD,
 } from "@/constants/appConstants";
+import { documentDirectory, downloadAsync } from "expo-file-system/legacy";
+import { Alert } from "react-native";
 import {
   getJamendoIdsOfEmotion,
   getPgpIdsOfEmotion,
@@ -592,52 +592,73 @@ function extractSunoOrgData(info: any) {
   return songList;
 }
 async function getSunoOrgTimestamps(taskId: string, audioId: string) {
-  try {
-    if (!taskId || !audioId) {
-      console.warn(
-        "Invalid Task ID or Audio ID to fetch Suno Org Timestamps: ",
-        { taskId, audioId },
-      );
-      return [];
-    }
-    console.log("=> SUNO_ORG timestamps start generaing for:", {
+  if (!taskId || !audioId) {
+    console.warn("Invalid Task ID or Audio ID to fetch Suno Org Timestamps: ", {
       taskId,
       audioId,
     });
-
-    const res = await fetch(
-      "https://api.sunoapi.org/api/v1/generate/get-timestamped-lyrics",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${SUNO_ORG_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ taskId, audioId }),
-      },
-    );
-
-    const json = await res.json();
-    if (json.code !== 200) {
-      console.warn("Suno Org Timestamps response not OK: ", json?.msg);
-      return [];
-    }
-
-    const alignedWords = json?.data?.alignedWords || [];
-    if (!alignedWords?.length) {
-      console.warn("Fetched Suno Org Timestamps are empty!");
-      return [];
-    }
-    console.log(
-      "=> Suno Org timestamps fetched successfully with length: ",
-      alignedWords.length,
-    );
-
-    return alignedWords as AlignedWord[];
-  } catch (err: any) {
-    console.warn("Error while fetching Suno Org timestamps: ", err?.message);
     return [];
   }
+
+  const maxAttempts = 10;
+  let attempts = 0;
+  while (attempts < maxAttempts) {
+    await new Promise((r) => setTimeout(r, attempts * 2000));
+    attempts++;
+
+    try {
+      const res = await fetch(
+        "https://api.sunoapi.org/api/v1/generate/get-timestamped-lyrics",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${SUNO_ORG_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ taskId, audioId }),
+        },
+      );
+
+      const json = await res.json();
+      if (json.code !== 200) {
+        console.warn(
+          `Suno Org Timestamps response not OK [attempt-${attempts}]: `,
+          json?.msg,
+        );
+        continue;
+      }
+
+      const alignedWords = json?.data?.alignedWords || [];
+      if (!alignedWords?.length) {
+        console.warn(
+          "Fetched Suno Org Timestamps are empty in attempt: ",
+          attempts,
+        );
+        continue;
+      }
+      console.log(
+        `=> Suno Org timestamps fetched successfully [attempt-${attempts}] with length: `,
+        alignedWords.length,
+      );
+
+      return alignedWords as AlignedWord[];
+    } catch (err: any) {
+      console.warn(
+        `Error while fetching Suno Org timestamps [attempt-${attempts}]: `,
+        err?.message,
+      );
+      continue;
+    }
+  }
+
+  console.warn(
+    `!! Max attemps - ${maxAttempts} failed while fetching SUNO_ORG timestamps for:`,
+    {
+      taskId,
+      audioId,
+    },
+  );
+  return [];
 }
 async function pollSunoOrgStreamUrl(
   taskId: string,

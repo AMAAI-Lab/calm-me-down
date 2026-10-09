@@ -45,6 +45,8 @@ export interface LyricAnimatorProps {
 
   /** Automatically scroll to the active line */
   autoScroll?: boolean;
+
+  maxVisibleLines?: number;
 }
 
 interface AnimatedLineProps {
@@ -243,6 +245,7 @@ export default function LyricAnimator({
   style,
   highlightWords = false,
   autoScroll = true,
+  maxVisibleLines = 7,
 }: LyricAnimatorProps) {
   const scrollRef = useRef<ScrollView>(null);
   const lineRefs = useRef<Record<number, View | null>>({});
@@ -252,6 +255,11 @@ export default function LyricAnimator({
    * Otherwise use the old text-based fallback.
    */
   const hasAlignedWords = alignedWords.length > 0;
+
+  const lineHeight =
+    StyleSheet.flatten(lineStyle || styles.line)?.lineHeight || 28;
+  const lyricsViewportHeight =
+    maxVisibleLines * Number(lineHeight) + (maxVisibleLines - 1) * 10 + 20;
 
   const lines = useMemo<LyricLine[]>(() => {
     /*
@@ -396,22 +404,27 @@ export default function LyricAnimator({
     }
 
     const timer = setTimeout(() => {
-      lineRefs.current[activeLineIndex]?.measureLayout(
+      const line = lineRefs.current[activeLineIndex];
+
+      if (!line) return;
+
+      line.measureLayout(
         scrollRef.current as any,
         (_x, y) => {
           scrollRef.current?.scrollTo({
-            y: Math.max(0, y - 100),
+            y: Math.max(
+              0,
+              y - lyricsViewportHeight / 2 + Number(lineHeight) / 2,
+            ),
             animated: true,
           });
         },
-        () => {
-          // Layout might not be ready yet.
-        },
+        () => {},
       );
     }, 50);
 
     return () => clearTimeout(timer);
-  }, [activeLineIndex, autoScroll]);
+  }, [activeLineIndex, autoScroll, lyricsViewportHeight, lineHeight]);
 
   /**
    * Finish callback.
@@ -442,9 +455,16 @@ export default function LyricAnimator({
   return (
     <ScrollView
       ref={scrollRef}
-      style={[styles.scroll, style]}
+      style={[
+        styles.scroll,
+        {
+          maxHeight: lyricsViewportHeight,
+        },
+        style,
+      ]}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
+      nestedScrollEnabled
     >
       {hasAlignedWords && <View style={{ height: 30 }} />}
 
@@ -485,6 +505,7 @@ export default function LyricAnimator({
 const styles = StyleSheet.create({
   scroll: {
     flex: 1,
+    width: "100%",
   },
   content: {
     gap: 0,
@@ -494,7 +515,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "600",
     color: "#ffffff",
-    lineHeight: 20,
+    lineHeight: 24,
   },
   activeLine: {
     color: "#ffffff",

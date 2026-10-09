@@ -1,3 +1,85 @@
+import Biomarkers from "@/components/ui/biomarkers";
+import CommonButton from "@/components/ui/common-button";
+import DebugOptionsModal from "@/components/ui/debug-options-modal";
+import EmotionGrid from "@/components/ui/emotion-grid";
+import HealthProviderSection from "@/components/ui/health-provider";
+import LoadingPhrases from "@/components/ui/loading-phrases";
+import LyricAnimator from "@/components/ui/lyric-animator";
+import MoodCard from "@/components/ui/mood-card";
+import {
+  ADD_ABOUT_TO_PROMPT,
+  ADD_PROFESSION_TO_PROMPT,
+  AI_TRAJECTORY_LENGTH,
+  APP_VERSION,
+  AUTO_GENERATE_NEWS_IN_PROMPT,
+  CONTINUOUS_PLAYBACK_MS,
+  DEBUG_MODE,
+  DEFAULT_HEALTH_DATA,
+  HealthProvider,
+  LISTEN_BEFORE_GENERATE_MS,
+  NON_AI_PLAYLIST_TYPE,
+  REPETITIVE_CHECK_IN_PROMPT,
+  SHOW_LYRICS,
+  SHOW_NEWS,
+  SHOW_WEATHER_INFO,
+} from "@/constants/appConstants";
+import { useAuth } from "@/context/AuthContext";
+import {
+  addTrackToSession as addTrackToTrajectory,
+  createMusicSession,
+  createMusicTrajectory,
+  updateMusicTrajectory,
+  updateTrackFields,
+} from "@/services/DbService";
+import { buildEmotionPath } from "@/services/EmotionPathService";
+import {
+  computeTempoRange,
+  fetchAppleHealthData,
+  HealthData,
+} from "@/services/HealthService";
+import {
+  clearJamendoIds,
+  clearPgpIds,
+  clearTrackIds,
+  clearTrajectoryId,
+  clearVocalGenderCounts,
+  FeedbackSubmittedStatus,
+  getFeedbackSubmitted,
+  getPlaylistFeedback,
+  getRandomGenres,
+  getSessionId,
+  getTrackId,
+  getTrajectoryId,
+  saveSessionId,
+  saveTrackId,
+  saveTrajectoryId,
+} from "@/services/LocalUserService";
+import {
+  downloadAndSaveAudio,
+  fetchJamendoTrack,
+  fetchSavedPlaylistTrack,
+  GeneratedSong,
+  generatelyrics,
+  generateSong,
+  onFinalReady,
+} from "@/services/MusicGenerationService";
+import {
+  fetchUniqueNewsData,
+  fetchWeatherData,
+  NewsData,
+  WeatherData,
+} from "@/services/WeatherNewsService";
+import { capitalize, formatTime } from "@/util/commonUtils";
+import { FontAwesome5 } from "@expo/vector-icons";
+import Slider from "@react-native-community/slider";
+import { useFocusEffect } from "@react-navigation/native";
+import {
+  setAudioModeAsync,
+  useAudioPlayer,
+  useAudioPlayerStatus,
+} from "expo-audio";
+import * as Location from "expo-location";
+import { useNavigation } from "expo-router";
 import React, {
   useCallback,
   useEffect,
@@ -16,88 +98,6 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { FontAwesome5 } from "@expo/vector-icons";
-import HealthProviderSection from "@/components/ui/health-provider";
-import {
-  computeTempoRange,
-  fetchAppleHealthData,
-  HealthData,
-} from "@/services/HealthService";
-import {
-  ADD_ABOUT_TO_PROMPT,
-  ADD_PROFESSION_TO_PROMPT,
-  AI_TRAJECTORY_LENGTH,
-  APP_VERSION,
-  AUTO_GENERATE_NEWS_IN_PROMPT,
-  CONTINUOUS_PLAYBACK_MS,
-  DEBUG_MODE,
-  DEFAULT_HEALTH_DATA,
-  HealthProvider,
-  LISTEN_BEFORE_GENERATE_MS,
-  NON_AI_PLAYLIST_TYPE,
-  REPETITIVE_CHECK_IN_PROMPT,
-  SHOW_LYRICS,
-  SHOW_NEWS,
-  SHOW_WEATHER_INFO,
-} from "@/constants/appConstants";
-import {
-  downloadAndSaveAudio,
-  fetchJamendoTrack,
-  fetchSavedPlaylistTrack,
-  GeneratedSong,
-  generatelyrics,
-  generateSong,
-  onFinalReady,
-} from "@/services/MusicGenerationService";
-import { capitalize, formatTime } from "@/util/commonUtils";
-import {
-  setAudioModeAsync,
-  useAudioPlayer,
-  useAudioPlayerStatus,
-} from "expo-audio";
-import Slider from "@react-native-community/slider";
-import CommonButton from "@/components/ui/common-button";
-import {
-  clearJamendoIds,
-  clearPgpIds,
-  clearTrackIds,
-  clearTrajectoryId,
-  clearVocalGenderCounts,
-  FeedbackSubmittedStatus,
-  getFeedbackSubmitted,
-  getPlaylistFeedback,
-  getRandomGenres,
-  getSessionId,
-  getTrackId,
-  getTrajectoryId,
-  saveSessionId,
-  saveTrackId,
-  saveTrajectoryId,
-} from "@/services/LocalUserService";
-import { useAuth } from "@/context/AuthContext";
-import {
-  addTrackToSession as addTrackToTrajectory,
-  createMusicSession,
-  createMusicTrajectory,
-  updateMusicTrajectory,
-  updateTrackFields,
-} from "@/services/DbService";
-import { useNavigation } from "expo-router";
-import MoodCard from "@/components/ui/mood-card";
-import Biomarkers from "@/components/ui/biomarkers";
-import {
-  fetchUniqueNewsData,
-  fetchWeatherData,
-  NewsData,
-  WeatherData,
-} from "@/services/WeatherNewsService";
-import LyricAnimator from "@/components/ui/lyric-animator";
-import { useFocusEffect } from "@react-navigation/native";
-import * as Location from "expo-location";
-import LoadingPhrases from "@/components/ui/loading-phrases";
-import { buildEmotionPath } from "@/services/EmotionPathService";
-import EmotionGrid from "@/components/ui/emotion-grid";
-import DebugOptionsModal from "@/components/ui/debug-options-modal";
 
 type TargetEmotion = "relaxed" | "joyful";
 type PlaylistType = "Trajectory" | "SavedPlaylist";
@@ -1810,7 +1810,7 @@ export default function ParticipantsScreen() {
                 currentTimeMs={currentTime * 1000}
                 songDurationMs={(duration || DEFAULT_DURATION) * 1000}
                 alignedWords={currentSong?.alignedWords || []}
-                autoScroll={false}
+                autoScroll={true}
                 highlightWords={true}
               />
             </View>
