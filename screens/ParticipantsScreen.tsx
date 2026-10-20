@@ -24,6 +24,7 @@ import {
   SHOW_WEATHER_INFO,
 } from "@/constants/appConstants";
 import { useAuth } from "@/context/AuthContext";
+import { useIsOnline, withRetry } from "@/hooks/useIsOnline";
 import {
   addTrackToSession as addTrackToTrajectory,
   createMusicSession,
@@ -171,6 +172,12 @@ export default function ParticipantsScreen() {
   const { user } = useAuth();
   const navigation = useNavigation();
 
+  const online = useIsOnline();
+  const [nextSongFailed, setNextSongFailed] = useState(false);
+  const pendingRef = useRef<
+    Record<number, { prompt: string; lyrics: string; musicStyle: string }>
+  >({});
+
   const [phase, setPhase] = useState<Phase>("setup");
   const [startEmotion, setStartEmotion] = useState<string>("");
   const [cuurentEmotion, setCurrentEmotion] = useState<string>("");
@@ -220,6 +227,9 @@ export default function ParticipantsScreen() {
   const [finalUrlsReady, setFinalUrlsReady] = useState<Record<number, boolean>>(
     {},
   );
+  const [trackStoredInDB, setTrackStoredInDB] = useState<
+    Record<number, boolean>
+  >({});
 
   const nudgeAnim = useRef(new Animated.Value(1)).current;
   const moodButtonAnim = useRef(new Animated.Value(1)).current;
@@ -334,6 +344,7 @@ export default function ParticipantsScreen() {
     setPlaylistType("");
     setLyricsQueue([]);
     setFinalUrlsReady({});
+    setTrackStoredInDB({});
     await clearTrajectoryId();
     await clearTrackIds();
     await clearPgpIds();
@@ -588,6 +599,12 @@ export default function ParticipantsScreen() {
     return trajec;
   };
 
+  const unlockRating = (index: number) => {
+    if (songRatings[index] === undefined) {
+      setRatingUnlocked(true);
+    }
+  };
+
   const generateLyricsAndSong = async (
     givenTargetEmotion?: string,
     nextPlaylistIdx: number = 0,
@@ -637,13 +654,14 @@ export default function ParticipantsScreen() {
       startEmotion || "relaxed",
       currHealthData.heartRate || 0,
     );
+    const index = 0;
 
     try {
       const generatedSong = await generateSong(
         currentLyrics || "Uplifting song",
         suggestedMusicStyle || favGenre || "Pop, Classical",
         startEmotion || "Relaxed",
-        currentSongIndex,
+        index,
         favGenre || user?.favoriteGenre,
         user?.favoriteBand,
         tempoRange,
@@ -684,7 +702,7 @@ export default function ParticipantsScreen() {
       const trackRes = await addTrackToTrajectory(
         user?.email!,
         sessionId!,
-        currentSongIndex,
+        index,
         {
           mood: startEmotion || currTrajectory[0] || "N/A",
           streamUrl: generatedStreamUrl || songQueue[0]?.audioUrl || "",
@@ -694,14 +712,17 @@ export default function ParticipantsScreen() {
           heartRate: healthData?.heartRate || "N/A",
           steps: healthData?.steps || "N/A",
           suggestedAiMusicStyle: suggestedMusicStyle || "",
+          songNumber: 1,
         },
         true,
         newTrajectoryID,
       );
       await saveTrackId(trackRes?.id!, trackRes?.songIdx || 0);
+      setTrackStoredInDB((prev) => ({ ...prev, [index]: true }));
     } catch (err) {
       console.error("Error updating DB: ", err);
     }
+    unlockRating(index);
   };
 
   const generateSavedPlaylist = async (
@@ -753,20 +774,23 @@ export default function ParticipantsScreen() {
       const trackRes = await addTrackToTrajectory(
         user?.email!,
         sessionId!,
-        currentSongIndex,
+        0,
         {
           mood: startEmotion || currTrajectory[0] || "N/A",
           streamUrl: track.audioUrl || "",
           heartRate: healthData?.heartRate || "N/A",
           steps: healthData?.steps || "N/A",
+          songNumber: 1,
         },
         true,
         newTrajectoryID,
       );
       await saveTrackId(trackRes?.id!, trackRes?.songIdx || 0);
+      setTrackStoredInDB((prev) => ({ ...prev, [0]: true }));
     } catch (err) {
       console.error("Error updating DB: ", err);
     }
+    unlockRating(0);
   };
 
   const handleStart = async () => {
@@ -943,6 +967,7 @@ export default function ParticipantsScreen() {
       currentMood || "relaxed",
       latestHealthData.heartRate || 0,
     );
+
     try {
       const generatedSong = await generateSong(
         currentLyrics || "Uplifting song",
@@ -985,12 +1010,146 @@ export default function ParticipantsScreen() {
           heartRate: latestHealthData?.heartRate || "N/A",
           steps: latestHealthData?.steps || "N/A",
           suggestedAiMusicStyle: suggestedMusicStyle || "",
+          songNumber: nextSongIdx + 1,
         },
         true,
         trajectoryID,
       );
 
       await saveTrackId(trackRes?.id!, trackRes?.songIdx || 0);
+      setTrackStoredInDB((prev) => ({ ...prev, [nextSongIdx]: true }));
+    } catch (err) {
+      console.error("Error while updating DB: ", err);
+    }
+
+    setNextSongLoading(false);
+  };
+  const generateNextSongWithRetry = async () => {
+    setNextSongLoading(true);
+    const nextSongIdx = currentSongIndex + 1;
+
+    if (songQueue.length > nextSongIdx) {
+      setNextSongLoading(false);
+      return;
+    }
+    if (nextSongIdx >= emotionTrajectory.length) {
+      console.warn(
+        "Could not generate next song! Songs generation completed for all the emotions in the path.",
+      );
+      setNextSongLoading(false);
+      setStartEmotion("");
+      return;
+    }
+
+    const latestHealthData = await fetchAppleHealthData(5);
+    const currentMood = emotionTrajectory?.[nextSongIdx] || "Relaxed";
+
+    console.log("Mood input for next song: ", currentMood);
+    console.log("HR for next song: ", latestHealthData.heartRate);
+    console.log("Steps for next song: ", latestHealthData.steps);
+
+    const favGenre = await getRandomGenres(user?.favoriteGenre || "");
+
+    const fail = () => {
+      setGenerationLockedForIndex(null);
+      setNextSongFailed(true);
+      setNextSongLoading(false);
+    };
+
+    // lyrics: reuse if a previous attempt already got them
+    let cached = pendingRef.current[nextSongIdx];
+    if (!cached) {
+      const prompt = await buildLyricsPrompt(
+        currentMood,
+        latestHealthData,
+        favGenre,
+      );
+      try {
+        const { lyrics, musicStyle = "" } = (await withRetry(() =>
+          generatelyrics(prompt),
+        )) || { lyrics: "", musicStyle: "" };
+        if (!lyrics) throw new Error("empty lyrics");
+
+        cached = pendingRef.current[nextSongIdx] = {
+          prompt,
+          lyrics,
+          musicStyle,
+        };
+        setLyricsQueue((prev) => {
+          const n = [...prev];
+          n[nextSongIdx] = lyrics;
+          return n;
+        });
+      } catch {
+        return fail();
+      }
+    }
+
+    // Generate Song Audio
+    console.log(
+      `Generating next song with lyrics: "${(cached.lyrics || "").substring(0, 150)}..."`,
+    );
+    let generatedStreamUrl = null;
+    let sunoOrgPayload = null;
+    const tempoRange = computeTempoRange(
+      currentMood || "relaxed",
+      latestHealthData.heartRate || 0,
+    );
+
+    // song
+    let generatedSong;
+    try {
+      generatedSong = await withRetry(() =>
+        generateSong(
+          cached.lyrics || "Uplifting song",
+          cached.musicStyle || favGenre || user?.favoriteGenre || "N/A",
+          currentMood,
+          nextSongIdx,
+          favGenre || user?.favoriteGenre,
+          user?.favoriteBand,
+          tempoRange,
+        ),
+      );
+    } catch {
+      return fail();
+    }
+    if (!generatedSong) return fail();
+
+    setSongQueue((prev) => {
+      const n = [...prev];
+      n[nextSongIdx] = generatedSong;
+      return n;
+    });
+    generatedStreamUrl = generatedSong?.audioUrl;
+    sunoOrgPayload = generatedSong?.songProviderPayload || {};
+    delete pendingRef.current[nextSongIdx];
+    setNextSongFailed(false);
+
+    try {
+      const sessionId = await getSessionId();
+      const trajectoryID = await getTrajectoryId();
+      const trackRes = await addTrackToTrajectory(
+        user?.email!,
+        sessionId,
+        nextSongIdx,
+        {
+          mood: currentMood || "N/A",
+          streamUrl:
+            generatedStreamUrl || songQueue[nextSongIdx]?.audioUrl || "",
+          lyrics: cached.lyrics,
+          lyricsPrompt: cached.prompt,
+          sunoOrgPayload: { ...sunoOrgPayload },
+          heartRate: latestHealthData?.heartRate || "N/A",
+          steps: latestHealthData?.steps || "N/A",
+          suggestedAiMusicStyle: cached.musicStyle || "",
+          songNumber: nextSongIdx + 1,
+        },
+        true,
+        trajectoryID,
+      );
+
+      await saveTrackId(trackRes?.id!, trackRes?.songIdx || 0);
+      setTrackStoredInDB((prev) => ({ ...prev, [nextSongIdx]: true }));
     } catch (err) {
       console.error("Error while updating DB: ", err);
     }
@@ -1043,12 +1202,14 @@ export default function ParticipantsScreen() {
           streamUrl: track.audioUrl || "",
           heartRate: latestHealthData?.heartRate || "N/A",
           steps: latestHealthData?.steps || "N/A",
+          songNumber: nextSongIdx + 1,
         },
         true,
         trajectoryID,
       );
 
       await saveTrackId(trackRes?.id!, trackRes?.songIdx || 0);
+      setTrackStoredInDB((prev) => ({ ...prev, [nextSongIdx]: true }));
     } catch (err) {
       console.error("Error while updating DB: ", err);
     }
@@ -1188,6 +1349,24 @@ export default function ParticipantsScreen() {
     });
   }, []);
 
+  // Retry generating next song
+  useEffect(() => {
+    if (online && nextSongFailed && !nextSongLoading) {
+      setGenerationLockedForIndex(currentSongIndex);
+      generateNextSongWithRetry();
+    }
+  }, [online, nextSongFailed]);
+
+  useEffect(() => {
+    if (
+      songJustFinished &&
+      ratingDone &&
+      songQueue.length > currentSongIndex + 1
+    ) {
+      handleNextSong();
+    }
+  }, [songQueue.length, songJustFinished, ratingDone]);
+
   // Update listening time of user for current song
   useEffect(() => {
     const clearListenInterval = () => {
@@ -1277,31 +1456,33 @@ export default function ParticipantsScreen() {
     };
     clearGenerateTimerInterval();
 
+    const index = currentSongIndex;
     if (
       !playerStatus.playing ||
       !currentSong ||
-      generationLockedForIndex === currentSongIndex ||
-      songQueue.length > currentSongIndex + 1
+      generationLockedForIndex === index ||
+      songQueue.length > index + 1
     ) {
       return;
     }
 
     generateTimerRef.current = setTimeout(() => {
       console.log(
-        `--Listen threshold reached. Generating next song for index ${currentSongIndex}`,
+        `--Listen threshold reached. Generating next song for index ${index}`,
       );
 
-      setGenerationLockedForIndex(currentSongIndex);
+      setGenerationLockedForIndex(index);
       if (playlistType === "Trajectory") {
-        generateNextSong();
+        // generateNextSong();
+        generateNextSongWithRetry();
       } else {
         generateNextSavedTrack();
       }
     }, LISTEN_BEFORE_GENERATE_MS);
 
     setTimeout(() => {
-      if (songRatings[currentSongIndex] === undefined) {
-        setRatingUnlocked(true);
+      if (trackStoredInDB[index]) {
+        unlockRating(index);
       }
     }, 10_000);
 
@@ -1886,7 +2067,7 @@ export default function ParticipantsScreen() {
       )}
 
       {/* Thumbs Up/Down buttons */}
-      {ratingUnlocked && songQueue?.length > 0 && (
+      {!ratingDone && ratingUnlocked && songQueue?.length > 0 && (
         <View
           style={{
             height: 40,
@@ -1904,8 +2085,7 @@ export default function ParticipantsScreen() {
               gap: 12,
               transform: [
                 {
-                  scale:
-                    songRatings[currentSongIndex] === undefined ? nudgeAnim : 1,
+                  scale: !ratingDone ? nudgeAnim : 1,
                 },
               ],
             }}
@@ -2012,6 +2192,31 @@ export default function ParticipantsScreen() {
             "Getting everything ready — just a moment...",
           ]}
         />
+      )}
+
+      {!online && (
+        <Text style={[styles.ratingAlertText, { marginTop: 20 }]}>
+          {`You're offline. Your next song will continue when you're back online.`}
+        </Text>
+      )}
+      {nextSongFailed && online && !nextSongLoading && (
+        <>
+          <Text
+            style={[
+              styles.startHint,
+              { fontSize: 15, marginTop: 30, marginBottom: 10 },
+            ]}
+          >{`Couldn't generate the next song.`}</Text>
+          <Pressable
+            onPress={() => {
+              setNextSongFailed(false);
+              generateNextSongWithRetry();
+            }}
+            style={[styles.startBtn, { marginHorizontal: 60 }]}
+          >
+            <Text style={styles.startBtnText}>Tap to retry</Text>
+          </Pressable>
+        </>
       )}
 
       {/* All playlists completed Message */}

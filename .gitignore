@@ -46,12 +46,15 @@ app-example
 #backup files
 App_bkup*.tsx
 
+
 music-api-commands
 .env
 
 #ignore bkup files
 *bkup*
 *bk*
+
+
 
 #ignore 
 eas.json
