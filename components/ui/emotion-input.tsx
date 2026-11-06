@@ -9,6 +9,7 @@ export default function EmotionInput({
   hint,
   error,
   numberOfLines = 1,
+  indicatorIcon = null,
   onChange,
 }: {
   label: string;
@@ -18,11 +19,16 @@ export default function EmotionInput({
   hint?: string;
   error?: string;
   numberOfLines?: number;
+  indicatorIcon?: React.ReactNode | null;
   onChange: (t: string) => void;
 }) {
   return (
     <View style={{ marginBottom: 16 }}>
-      <Text style={styles.emotionLabel}>{label}</Text>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+        {indicatorIcon}
+        <Text style={styles.emotionLabel}>{label}</Text>
+      </View>
+
       <View style={[styles.emotionInput, error && styles.inputError]}>
         {icon}
         <TextInput

@@ -1,14 +1,36 @@
+import Biomarkers from "@/components/ui/biomarkers";
+import DebugOptionsModal from "@/components/ui/debug-options-modal";
+import { EmotionPicker } from "@/components/ui/emotion-picker";
+import LoadingPhrases from "@/components/ui/loading-phrases";
+import LyricAnimator from "@/components/ui/lyric-animator";
 import {
   addTrackToSession,
   createMusicSession,
   updateTrackFields,
 } from "@/services/DbService";
+import {
+  clearSessionId,
+  clearTrackIds,
+  getRandomGenres,
+  getSessionId,
+  getTrackId,
+  saveSessionId,
+  saveTrackId,
+} from "@/services/LocalUserService";
+import { formatTime } from "@/util/commonUtils";
 import { FontAwesome5 } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
-import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
+import {
+  setAudioModeAsync,
+  useAudioPlayer,
+  useAudioPlayerStatus,
+} from "expo-audio";
+import * as Location from "expo-location";
+import { useNavigation } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,11 +42,16 @@ import CommonButton from "../components/ui/common-button";
 import EmotionInput from "../components/ui/emotion-input";
 import HealthProviderSection from "../components/ui/health-provider";
 import {
+  ADD_ABOUT_TO_PROMPT,
+  ADD_PROFESSION_TO_PROMPT,
+  AUTO_GENERATE_NEWS_IN_PROMPT,
   CONTINUOUS_PLAYBACK_MS,
   DEBUG_MODE,
   HealthProvider,
   HRV_APP_VERSION,
   LISTEN_BEFORE_GENERATE_MS,
+  QuadrantKey,
+  REPETITIVE_CHECK_IN_PROMPT,
   SHOW_LYRICS,
   SUNO_ORG_PAYLOAD,
   UserInput,
@@ -55,51 +82,36 @@ import {
   NewsData,
   WeatherData,
 } from "../services/WeatherNewsService";
-import {
-  clearSessionId,
-  clearTrackIds,
-  getSessionId,
-  getTrackId,
-  saveSessionId,
-  saveTrackId,
-} from "@/services/LocalUserService";
-import LyricAnimator from "@/components/ui/lyric-animator";
-import { formatTime } from "@/util/commonUtils";
-import Biomarkers from "@/components/ui/biomarkers";
-import * as Location from "expo-location";
-import DebugOptionsModal from "@/components/ui/debug-options-modal";
-import {
-  EmotionPicker,
-  EmotionSelection,
-} from "@/components/ui/emotion-picker";
 
 const DEFAULT_DURATION = 150;
 
 export default function HomeScreen() {
   const authContext = useAuth();
   const user = authContext.user as UserProfile;
+  const navigation = useNavigation();
 
   const [input, setInput] = useState<UserInput>({
     currentMood: "",
     desiredMood: "",
     activity: "",
   });
-  const [healthData, setHealthData] = useState<HealthData | null>(null);
+  // const [healthData, setHealthData] = useState<HealthData | null>(null);
+  const [healthData, setHealthData] = useState<HealthData | null>({
+    heartRate: 70,
+    heartRateSamples: [],
+    steps: 372,
+    hrv: null,
+    arousal: null,
+  });
   const [healthProvider, setHealthProvider] =
     useState<HealthProvider>("Apple Health");
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [newsData, setNewsData] = useState<NewsData | null>(null);
 
-  const [generatingLyrics, setGeneratingLyrics] = useState(false);
-  const [generatingSong, setGeneratingSong] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [nextSongLoading, setNextSongLoading] = useState(false);
+  const [songJustFinished, setSongJustFinished] = useState(false);
   const [lyricPrompt, setLyricPrompt] = useState("");
-
-  const [currentEmotion, setCurrentEmotion] = useState<EmotionSelection | null>(
-    null,
-  );
-  const [desiredEmotion, setDesiredEmotion] = useState<EmotionSelection | null>(
-    null,
-  );
 
   const [emotionPath, setEmotionPath] = useState<string[]>([]);
   const [songQueue, setSongQueue] = useState<GeneratedSong[]>([]);
@@ -116,25 +128,22 @@ export default function HomeScreen() {
   const [vaPath, setVaPath] = useState<{ valence: number; arousal: number }[]>(
     [],
   );
-  const [bioLog, setBioLog] = useState<
-    {
-      songIndex: number;
-      planned: { valence: number; arousal: number };
-      adjusted: { valence: number; arousal: number; emotion: string };
-      bioArousal: number | null;
-      deviation: number;
-      strategy: string;
-      hr: number | null;
-      steps: number | null;
-      hrv: number | null;
-      timestamp: string;
-    }[]
-  >([]);
   const [sliderValue, setSliderValue] = useState(0);
   const [isSliding, setIsSliding] = useState(false);
+  const [ratingUnlocked, setRatingUnlocked] = useState(false);
+  const [songRatings, setSongRatings] = useState<Record<number, "up" | "down">>(
+    {},
+  );
+  const [trackStoredInDB, setTrackStoredInDB] = useState<
+    Record<number, boolean>
+  >({});
 
-  const listenIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const listenIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const generateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nudgeAnim = useRef(new Animated.Value(1)).current;
+  const scrollViewRef = useRef<ScrollView>(null);
+  const lyricsRef = useRef<View>(null);
+  const indicatorAnim = useRef(new Animated.Value(1)).current;
 
   const isFormComplete = useMemo(() => {
     const requiredFields = [input.currentMood, input.desiredMood];
@@ -147,6 +156,15 @@ export default function HomeScreen() {
   const playerStatus = useAudioPlayerStatus(player);
   const duration = player?.duration ?? 0;
   const currentTime = player?.currentTime ?? 0;
+
+  const indicatorIcon = useMemo(() => {
+    const { currentMood, desiredMood, activity } = input;
+
+    if (!currentMood) return "current";
+    else if (!desiredMood) return "desired";
+    else if (!activity) return "activity";
+    return "";
+  }, [input]);
 
   const handleSlidingComplete = async (value: number) => {
     try {
@@ -177,10 +195,244 @@ export default function HomeScreen() {
     setGenerationLockedForIndex(null);
     setDownloadedAudios({});
     setVaPath([]);
-    setBioLog([]);
     setLyricsQueue([]);
+    setSongRatings({});
+    setTrackStoredInDB({});
     await clearSessionId();
     await clearTrackIds();
+  };
+
+  const unlockRating = (index: number) => {
+    if (songRatings[index] === undefined) {
+      setRatingUnlocked(true);
+    }
+  };
+
+  const generateTrajectory = () => {
+    const { currentMood, desiredMood } = input;
+
+    if (DEBUG_MODE) {
+      return [currentMood || "Bored", desiredMood || "Relaxed"];
+    }
+
+    let trajec = buildEmotionPath(
+      currentMood,
+      desiredMood || "Relaxed",
+      3,
+      false,
+    );
+
+    if (trajec.length === 1) {
+      return [currentMood || "Bored", desiredMood || "Relaxed"];
+    }
+    return trajec;
+  };
+
+  const buildLyricsPrompt = async (
+    mood: string,
+    healthData: HealthData,
+    favGenre: string,
+    valence: number = 0,
+    arousal: number = 0,
+    strategy: string = "",
+  ) => {
+    const isHrValid = !!healthData.heartRate;
+    const isStepsValid = !!healthData.steps;
+    const isHRV = HRV_APP_VERSION;
+
+    const { weather, news } = (await fetchWeatherAndNews()) || {};
+    const addProfession = ADD_PROFESSION_TO_PROMPT && !!user?.profession;
+    const about = ADD_ABOUT_TO_PROMPT && user?.about?.trim();
+    const newsHeadlines = (news?.headline || [])
+      .map((h, i) => `  ${i + 1}. "${h}"`)
+      .join("\n");
+
+    const preventRepetition = REPETITIVE_CHECK_IN_PROMPT;
+    const repetitionRules = `
+      PERSONALIZATION STRATEGY (IMPORTANT)
+      Do not try to include every user input in the lyrics.
+
+      Before writing, internally select only 2–4 meaningful elements from the available personal context.
+
+      Choose elements that create the strongest emotional story:
+      - About details (interests, memories, personality, preferences)
+      - Profession experiences or routines
+      - Activity/movement state
+      - Weather/environment
+      - Location atmosphere
+      - Mood
+      - Music style influence
+      - Physical state
+      - News context, ONLY when it is emotionally relevant to the mood
+
+      ${
+        AUTO_GENERATE_NEWS_IN_PROMPT
+          ? `
+      NEWS CONTEXT (OPTIONAL):
+      News is an optional creative element, just like the other personalization inputs.
+      It does NOT need to appear in every song.
+
+      First internally decide whether news would strengthen the current song.
+      If a provided news headline is available and emotionally relevant to the mood:
+      - You may select it as one of the 2–4 elements.
+      - Do not summarize or directly reproduce the headline.
+      - Extract a relatable human emotion, situation, experience, or broader theme from it.
+      - Weave that theme naturally into the lyrics.
+
+      If provided news is unavailable, irrelevant, or does not fit the selected
+      emotional direction:
+      - You may optionally create a fictional, general "news-like" situation
+        that naturally fits the mood.
+      - This should be used only as creative inspiration, not as factual current news.
+      - Do not invent real people, organizations, locations, statistics, or specific
+        current events.
+      - Keep the imagined situation broad and human, such as a community helping
+        each other, a small local celebration, a new discovery, people rebuilding
+        after difficulty, or an unexpected act of kindness.
+      - Transform the situation into an emotion or human experience rather than
+        writing a news report.
+
+      The model should decide internally whether to use:
+      A) the provided news,
+      B) an internally imagined news-like context, or
+      C) no news context at all.
+
+      News, whether provided or internally imagined, counts as ONE personalization
+      element within the 2–4 element limit.
+      Do not force news into the song.
+        `
+          : ``
+      }
+
+      Treat the remaining inputs as background context only.
+
+      Each song should have a different personalization focus.
+      Do not repeatedly use the same type of details across songs.
+
+      Example:
+      One song may focus on a personal memory + weather.
+      Another may focus on daily routine + profession.
+      Another may focus on movement + inner emotion.
+
+      The goal is a unique emotional story, not a summary of the user's data.      
+    `;
+    const originalityRules = `
+      6. ORIGINALITY and LYRIC VARIATION RULES:
+      - Avoid repeating phrases, metaphors, sentence patterns, and imagery from previous songs.
+      - Do not default to common AI lyric imagery.
+      - Prefer specific and unexpected details over generic emotional descriptions.
+      - Create a new setting, perspective, and emotional angle for each song.
+
+      Avoid overused imagery such as:
+      ceiling fans, fluorescent lights, city lights, lonely streets,
+      empty roads, rain on windows, coffee cups, shadows,
+      heartbeat drums, echoes, midnight trains, neon lights.
+
+      Use different vocabulary, environments, and metaphors each time.
+    `;
+    const strategyGuidance: Record<string, string> = {
+      on_track:
+        "The listener is responding well. Continue the current emotional trajectory.",
+      slow_down:
+        "The listener's arousal is higher than expected (possibly stressed/anxious). " +
+        "Use slower tempo, softer instrumentation, and more calming imagery to help them relax.",
+      intensify:
+        "The listener is calmer than expected. " +
+        "Slightly increase energy with more rhythmic elements and uplifting imagery.",
+      hold_steady:
+        "Maintain the current energy level. The listener is in a transitional state.",
+    };
+    const prompt = `
+      You are a creative songwriter. Generate original song lyrics personalized to the following inputs:
+
+      USER
+      ${user?.nickName && `- Name: ${user.nickName}`}
+      - Age: ${user?.age}
+      ${addProfession ? `- Profession: ${user.profession}` : ""}
+      ${about ? `- About: ${about}` : ""}
+
+      MUSIC STYLE
+      - Genre preference: ${favGenre}
+      - Stylistic influence (do NOT imitate or quote): ${user?.favoriteBand}
+      - Mood: ${mood}
+      ${isHRV ? `- Emotional coordinates: Valence ${valence} (${valence > 0 ? "positive" : "negative"}), Arousal ${arousal} (${arousal > 0.5 ? "high energy" : "low energy"})` : ""}
+
+      PHYSICAL CONTEXT
+      ${isHrValid ? `- Heart rate in last 5 min: ${healthData.heartRate} bpm` : ""}
+      ${isStepsValid ? `- Movement in last 5 min: ${healthData.steps} steps` : ""}
+      - Current or upcoming activity: ${input.activity}
+      ${
+        isHRV
+          ? `
+        - HRV: ${healthData.hrv ?? "N/A"} ms
+        - Estimated emotional arousal: ${healthData.arousal !== null ? (healthData.arousal * 100).toFixed(0) + "%" : "N/A"}
+
+        BIOMETRIC ADAPTATION
+        ${strategyGuidance[strategy] || strategyGuidance.on_track}
+      `
+          : ""
+      }
+
+      ENVIRONMENT
+      - Location: ${weather?.city || "Unknown"}
+      - Weather: ${weather?.temperature ? `${weather.temperature}°C, ${weather.description}` : "Unknown"}
+      - Optional news inspiration (pick at most one if emotionally relevant, ignore the rest):
+      ${newsHeadlines}
+
+      ${preventRepetition ? `${repetitionRules}` : ""}
+
+      TASK:
+      Write cohesive song lyrics.
+      1. Structure: Verse 1, Pre-Chorus, Chorus, Verse 2, Pre-Chorus, Outro.
+      2. Line count (STRICT): Verse = 4 lines, Pre-Chorus = 2 lines, Chorus = 4 lines, Outro = 3 lines. Total: 23 lines.
+      3. Line length: Each line must be 6–10 words. No long run-on lines.
+      4. Tone: ${mood} and emotionally grounded.
+      ${
+        preventRepetition
+          ? `
+      5. Integration:
+      - Use selected personal/context elements naturally.
+      - Do not force every input into the lyrics.
+      - Physical state, environment, activity and news should only appear if they strengthen the emotional story.
+      - News is optional and may be omitted entirely.
+      - If news is selected, incorporate its underlying human emotion or theme subtly and metaphorically rather than describing it literally.
+      `
+          : `
+      5. Integration: Integrate physical state, environment, and (if relevant) the news mood subtly and metaphorically
+      `
+      }
+      ${
+        preventRepetition
+          ? `${originalityRules}`
+          : `
+      6. Originality: Avoid clichés and generic motivational phrases.
+      `
+      }
+      7. Style: Use the genre and stylistic influence only for rhythm, imagery, and tone guidance—do not imitate or quote them.
+      8. If an "About" detail is provided, subtly personalize the lyrics using relevant memories, interests, preferences, or life details. Keep it natural and poetic rather than directly repeating the text.
+      ${addProfession ? `9. If profession information is available, subtly reflect experiences, aspirations, or everyday moments associated with that profession. Keep references natural and poetic rather than explicitly stating the profession.` : ``}
+      ${addProfession ? `10` : `9`}. Before writing the lyrics, internally consider how the song should feel in terms of emotion, genre, and tempo/beat (e.g., slow emotional, mid-tempo groovy, fast energetic), and reflect that naturally in rhythm, wording, and flow of the lyrics. Do NOT explicitly mention tempo or BPM in the lyrics.
+
+      MUSIC STYLE STRING:
+      Based on the mood, heart rate, steps and activity, generate a short Suno-style music style descriptor (max 12 words). It should describe genre, tempo feel, and sonic texture.
+      Example: Dreamy indie pop, slow tempo, warm acoustic guitar, soft vocals
+
+      OUTPUT FORMAT (STRICT):
+      Return ONLY valid JSON. No preamble or markdown. Use the following structure:
+      {
+        "lyrics": {
+          "verse1": "line1\nline2\nline3\nline4",
+          "pre_chorus": "line1\nline2",
+          "chorus": "line1\nline2\nline3\nline4",
+          "verse2": "line1\nline2\nline3\nline4",
+          "pre_chorus2": "line1\nline2",
+          "outro": "line1\nline2\nline3"
+        },
+        "musicStyle": "short suno-style descriptor here"
+      }
+    `;
+
+    return prompt;
   };
 
   const generateLyricsAndSong = async () => {
@@ -188,19 +440,18 @@ export default function HomeScreen() {
       console.warn(`Missing form data!`);
       return;
     }
-    if (generatingLyrics || generatingSong) {
+    if (loading) {
       return;
     }
-
+    setLoading(true);
     await clearStates();
 
-    const emotionTrajectory = buildEmotionPath(
-      input.currentMood,
-      input.desiredMood,
-    );
+    const emotionTrajectory = generateTrajectory();
     console.log("Emotion Trajectory:", emotionTrajectory);
     setEmotionPath(emotionTrajectory);
 
+    const favGenre =
+      (await getRandomGenres(user?.favoriteGenre || "")) || user?.favoriteGenre;
     let prompt = "";
     let adjustedEmotion = {
       valence: 0,
@@ -209,10 +460,6 @@ export default function HomeScreen() {
       deviation: 0,
     };
     let hrvMetrics = {};
-    const { weather, news } = (await fetchWeatherAndNews()) || {
-      weather: null,
-      news: null,
-    };
 
     if (HRV_APP_VERSION) {
       const vaTrajectory = buildVAPath(input.currentMood, input.desiredMood);
@@ -238,34 +485,15 @@ export default function HomeScreen() {
           `Deviation: ${adjustedEmotion.deviation}, Strategy: ${strategy}`,
       );
 
-      // Log biometric state for this song
-      setBioLog((prev) => [
-        ...prev,
-        {
-          songIndex: 0,
-          planned: vaTrajectory[0],
-          adjusted: adjustedEmotion,
-          bioArousal: healthData.arousal,
-          deviation: adjustedEmotion.deviation,
-          strategy,
-          hr: healthData.heartRate,
-          steps: healthData.steps,
-          hrv: healthData.hrv,
-          timestamp: new Date().toISOString(),
-        },
-      ]);
-
       // Build the prompt with biometric context
-      prompt = buildLyricPrompt({
-        input: { ...user, ...input },
-        mood: adjustedEmotion.emotion,
-        valence: adjustedEmotion.valence,
-        arousal: adjustedEmotion.arousal,
+      prompt = await buildLyricsPrompt(
+        adjustedEmotion.emotion,
         healthData,
-        weatherData: weather,
-        newsData: news,
+        favGenre,
+        adjustedEmotion.valence,
+        adjustedEmotion.arousal,
         strategy,
-      });
+      );
 
       hrvMetrics = {
         plannedVA: vaTrajectory[0],
@@ -273,100 +501,35 @@ export default function HomeScreen() {
         strategy,
       };
     } else {
-      prompt = `
-        You are a creative songwriter. Generate original song lyrics personalized to the following inputs:
-
-        USER
-        ${user?.nickName && `- Name: ${user.nickName}`}
-        - Age: ${user.age}
-
-        MUSIC STYLE
-        - Genre preference: ${user.favoriteGenre}
-        - Stylistic influence (do NOT imitate or quote): ${user.favoriteBand}
-        - mood: ${emotionTrajectory[0]}
-
-        PHYSICAL CONTEXT
-        - Heart rate: ${healthData.heartRate} bpm (last 5 min)
-        - Daily activity: ${healthData.steps} steps (last 5 min)
-        - Current or upcoming activity: ${input.activity || "None specified"}
-
-        ENVIRONMENT
-        - Location: ${weather?.city || "Unknown"}
-        - Weather: ${weather?.temperature ? `${weather.temperature}°C, ${weather.description}` : "Unknown"}
-        - News mood cue (optional): ${news?.headline?.[0] || "N/A"}
-
-        TASK:
-        Write cohesive song lyrics.
-        1. Structure: Verse 1, Chorus, Verse 2, Chorus (exact repeat), and Outro.
-        2. Tone: motivational, uplifting, and emotionally grounded.
-        3. Length: Target ~180–220 words total.
-        4. Integration: Integrate physical state, environment, and (if relevant) the news mood subtly and metaphorically
-        5. Originality: Avoid clichés and generic motivational phrases.
-        6. Style: Use the genre and stylistic influence only for rhythm, imagery, and tone guidance—do not imitate or quote them.
-
-        OUTPUT FORMAT (STRICT):
-        Return ONLY valid JSON. No preamble or markdown. Use the following structure:
-        {
-          "lyrics": {
-            "verse1": "...",
-            "chorus": "...",
-            "verse2": "...",
-            "outro": "..."
-          }
-        }
-      `;
+      prompt = await buildLyricsPrompt(
+        emotionTrajectory[0],
+        healthData,
+        favGenre,
+      );
     }
 
     setLyricPrompt(prompt);
-    setGeneratingLyrics(true);
-
-    // DEBUG MODE: Skip API calls
-    if (DEBUG_MODE) {
-      console.log("DEBUG MODE: Generating mock lyrics and song...");
-
-      // Mock Latency
-      setTimeout(async () => {
-        // 2. Mock Song (Immediately after)
-        setGeneratingSong(true);
-        setTimeout(() => {
-          const mockSongData: GeneratedSong = {
-            audioUrl:
-              // "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", // Public domain MP3
-              "https://wephotos1.s3.amazonaws.com/bCv0l1ycm2Ac.mp3",
-            title: `Song for ${user?.nickName || "User"}`,
-            duration: 30,
-            provider: "MOCK",
-          };
-          setSongQueue([mockSongData]);
-          setCurrentSongIndex(0);
-          setGeneratingSong(false);
-        }, 1500); // 1.5s delay for song generation simulation
-      }, 1000); // 1s delay for lyrics simulation
-
-      return;
-    }
 
     // Generate song lyrics
     let currentLyrics = "";
+    let suggestedMusicStyle = "";
     try {
-      const { lyrics } = (await generatelyrics(prompt)) || {};
+      const { lyrics, musicStyle = "" } = (await generatelyrics(prompt)) || {};
       if (lyrics) {
         currentLyrics = lyrics;
         setLyricsQueue([lyrics]);
       } else {
         console.warn("Lyrics Generation Failed!");
       }
+      suggestedMusicStyle = musicStyle;
     } catch (error: any) {
       console.error(
         "An error occurred while generating lyrics:",
         error.message,
       );
-    } finally {
-      setGeneratingLyrics(false);
     }
 
     // Generate Song Audio
-    setGeneratingSong(true);
     console.log(
       `Generating song with lyrics: ${(currentLyrics || "").substring(0, 50)}...`,
     );
@@ -375,10 +538,10 @@ export default function HomeScreen() {
     try {
       const generatedSong = await generateSong(
         currentLyrics || "Uplifting song",
-        user.favoriteGenre,
+        suggestedMusicStyle || favGenre,
         adjustedEmotion.emotion || input.desiredMood,
-        currentSongIndex,
-        user.favoriteGenre,
+        0,
+        favGenre,
         user.favoriteBand,
       );
       if (generatedSong) {
@@ -393,12 +556,13 @@ export default function HomeScreen() {
         error.message,
       );
     }
-    setGeneratingSong(false);
+    setLoading(false);
 
     try {
+      const { activity, currentMood, desiredMood } = input;
       const newSessionID = await createMusicSession(user?.email!, {
         emotionPath: emotionTrajectory,
-        userDetails: { ...input },
+        userDetails: { activity, currentMood, desiredMood },
         lyricPrompt: prompt,
         songPrompt: currentLyrics,
         hrvUsed: HRV_APP_VERSION,
@@ -406,23 +570,36 @@ export default function HomeScreen() {
       });
       await saveSessionId(newSessionID);
 
-      const trackRes = await addTrackToSession(
-        user?.email!,
-        newSessionID!,
-        currentSongIndex,
-        {
-          mood: emotionTrajectory[0] || "N/A",
-          streamUrl: generatedStreamUrl || songQueue[0]?.audioUrl || "",
-          lyrics: currentLyrics,
-          lyricsPrompt: prompt,
-          heartRate: healthData?.heartRate || "N/A",
-          steps: healthData?.steps || "N/A",
-          hrvMetrics,
-        },
-      );
+      const trackRes = await addTrackToSession(user?.email!, newSessionID!, 0, {
+        mood: emotionTrajectory[0] || "N/A",
+        streamUrl: generatedStreamUrl || songQueue[0]?.audioUrl || "",
+        lyrics: currentLyrics,
+        lyricsPrompt: prompt,
+        heartRate: healthData?.heartRate || "N/A",
+        steps: healthData?.steps || "N/A",
+        hrvMetrics,
+        suggestedAiMusicStyle: suggestedMusicStyle || "",
+      });
       await saveTrackId(trackRes?.id!, trackRes?.songIdx || 0);
+      setTrackStoredInDB({ 0: true });
     } catch (err) {
       console.error("Error updating DB: ", err);
+    }
+
+    unlockRating(0);
+  };
+
+  const playAudioPlayer = () => {
+    player.setActiveForLockScreen(true, {
+      title: currentSong?.title || "Emotion App song",
+      artist: user?.nickName || "Emotion App",
+      albumTitle: `Your Personalized Playlist`,
+    });
+
+    player.play();
+
+    if (Math.floor(currentTime) === Math.floor(duration)) {
+      handleNextSong();
     }
   };
 
@@ -430,9 +607,8 @@ export default function HomeScreen() {
     if (playerStatus.playing) {
       player.pause();
     } else {
-      player.play();
+      playAudioPlayer();
     }
-    //if song is finished, play from beginning TODO
   };
 
   const handlePrevSong = () => {
@@ -473,6 +649,7 @@ export default function HomeScreen() {
         return;
       }
     }
+    setNextSongLoading(true);
 
     // const latestHealthData = await fetchAppleHealthData(10);
     const latestHealthData = await fetchLatestHealthData();
@@ -486,10 +663,8 @@ export default function HomeScreen() {
       deviation: 0,
     };
     let hrvMetrics = {};
-    const { weather, news } = (await fetchWeatherAndNews()) || {
-      weather: null,
-      news: null,
-    };
+    const favGenre =
+      (await getRandomGenres(user?.favoriteGenre || "")) || user?.favoriteGenre;
 
     if (HRV_APP_VERSION) {
       adjustedEmotion = getBiometricAdjustedEmotion(
@@ -515,34 +690,15 @@ export default function HomeScreen() {
         `  HR: ${latestHealthData.heartRate}, Steps: ${latestHealthData.steps}, HRV: ${latestHealthData.hrv}`,
       );
 
-      // Log biometric state
-      setBioLog((prev) => [
-        ...prev,
-        {
-          songIndex: nextSongIdx,
-          planned: plannedVA,
-          adjusted: adjustedEmotion,
-          bioArousal: latestHealthData.arousal,
-          deviation: adjustedEmotion.deviation,
-          strategy,
-          hr: latestHealthData.heartRate,
-          steps: latestHealthData.steps,
-          hrv: latestHealthData.hrv,
-          timestamp: new Date().toISOString(),
-        },
-      ]);
-
       // Build prompt with biometric-adjusted mood
-      prompt = buildLyricPrompt({
-        input: { ...user, ...input },
-        mood: adjustedEmotion.emotion,
-        valence: adjustedEmotion.valence,
-        arousal: adjustedEmotion.arousal,
-        healthData: latestHealthData,
-        weatherData: weather,
-        newsData: news,
+      prompt = await buildLyricsPrompt(
+        adjustedEmotion.emotion,
+        latestHealthData,
+        favGenre,
+        adjustedEmotion.valence,
+        adjustedEmotion.arousal,
         strategy,
-      });
+      );
 
       hrvMetrics = {
         plannedVA,
@@ -554,78 +710,21 @@ export default function HomeScreen() {
       console.log("HR for next song: ", latestHealthData.heartRate);
       console.log("Steps for next song: ", latestHealthData.steps);
 
-      prompt = `
-        You are a creative songwriter. Generate original song lyrics personalized to the following inputs:
-
-        USER
-        - Name: ${user.nickName}
-        - Age: ${user.age}
-
-        MUSIC STYLE
-        - Genre preference: ${user.favoriteGenre}
-        - Stylistic influence (do NOT imitate or quote): ${user.favoriteBand}
-        - mood: ${currentMood}
-
-        PHYSICAL CONTEXT
-        - Heart rate in last 5 min: ${latestHealthData.heartRate} bpm
-        - Movement in last 5 min: ${latestHealthData.steps} steps
-        - Current or upcoming activity: ${input.activity || "None specified"}
-
-        ENVIRONMENT
-        - Location: ${weather?.city || "Unknown"}
-        - Weather: ${weather?.temperature ? `${weather.temperature}°C, ${weather.description}` : "Unknown"}
-        - News mood cue (optional): ${news?.headline?.[0] || "N/A"}
-
-        TASK:
-        Write cohesive song lyrics.
-        1. Structure: Verse 1, Chorus, Verse 2, Chorus (exact repeat), and Outro.
-        2. Tone: motivational, uplifting, and emotionally grounded.
-        3. Length: Target ~180-220 words total.
-        4. Integration: Integrate physical state, environment, and (if relevant) the news mood subtly and metaphorically
-        5. Originality: Avoid clichés and generic motivational phrases.
-        6. Style: Use the genre and stylistic influence only for rhythm, imagery, and tone guidance—do not imitate or quote them.
-
-        OUTPUT FORMAT (STRICT):
-        Return ONLY valid JSON. No preamble or markdown. Use the following structure:
-        {
-          "lyrics": {
-            "verse1": "...",
-            "chorus": "...",
-            "verse2": "...",
-            "outro": "..."
-          }
-        }
-      `;
-    }
-
-    if (DEBUG_MODE) {
-      console.log("DEBUG MODE: Generating mock lyrics and next song...");
-
-      setTimeout(async () => {
-        const nextSongIdx = ((currentSongIndex + 1) % 15) + 1;
-        const mockSongData: GeneratedSong = {
-          audioUrl: `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-${nextSongIdx}.mp3`, // Public domain MP3
-          title: `Song for ${user.nickName || "the User"}`,
-          duration: 30,
-          provider: "MOCK",
-        };
-
-        setSongQueue((prev) => [...prev, mockSongData]);
-      }, 500);
-
-      return;
+      prompt = await buildLyricsPrompt(currentMood, latestHealthData, favGenre);
     }
 
     // Generate song lyrics
     let currentLyrics = "";
+    let suggestedMusicStyle = "";
     try {
-      const { lyrics } = (await generatelyrics(prompt)) || {};
+      const { lyrics, musicStyle = "" } = (await generatelyrics(prompt)) || {};
       if (lyrics) {
         currentLyrics = lyrics;
         setLyricsQueue((prev) => [...prev, lyrics]);
       } else {
         console.warn("Lyrics Generation failed for next song!");
       }
+      suggestedMusicStyle = musicStyle;
     } catch (error: any) {
       console.error(
         "An error occurred while generating lyrics for next song:",
@@ -641,10 +740,10 @@ export default function HomeScreen() {
     try {
       const generatedSong = await generateSong(
         currentLyrics || "Uplifting song",
-        user?.favoriteGenre || "N/A",
+        suggestedMusicStyle || favGenre || "Pop, Classical",
         adjustedEmotion.emotion || input?.desiredMood || "N/A",
         nextSongIdx,
-        user?.favoriteGenre,
+        favGenre,
         user?.favoriteBand,
       );
       if (generatedSong) {
@@ -676,13 +775,17 @@ export default function HomeScreen() {
           heartRate: latestHealthData?.heartRate || "N/A",
           steps: latestHealthData?.steps || "N/A",
           hrvMetrics,
+          suggestedAiMusicStyle: suggestedMusicStyle || "",
         },
       );
 
       await saveTrackId(trackRes?.id!, trackRes?.songIdx || 0);
+      setTrackStoredInDB((prev) => ({ ...prev, [nextSongIdx]: true }));
     } catch (err) {
       console.error("Error while updating DB: ", err);
     }
+
+    setNextSongLoading(false);
   };
 
   const fetchWeatherAndNews = async (
@@ -712,10 +815,61 @@ export default function HomeScreen() {
     return { weather, news };
   };
 
+  const handleChangeEmotion = (
+    payload: { emotion: string; quadrant: QuadrantKey } | null,
+    type: "curr" | "desired",
+  ) => {
+    const mood = type === "curr" ? "currentMood" : "desiredMood";
+    const quad = type === "curr" ? "currentQuad" : "desiredQuad";
+    const emotion = payload ? payload.emotion : "";
+    const quadrant = payload ? payload.quadrant : "";
+
+    handleInputChange(mood, emotion);
+    handleInputChange(quad, quadrant);
+  };
+
+  const handleRate = async (rating: "up" | "down") => {
+    const idx = currentSongIndex;
+    setSongRatings((prev) => ({ ...prev, [idx]: rating }));
+    setRatingUnlocked(false);
+    await updateTrackInDB({ liked: rating === "up" }, idx);
+  };
+
+  const handleEditProfile = () => {
+    navigation.navigate({
+      name: "Login",
+      params: { mode: "edit" },
+    } as never);
+  };
+
+  const AnimatedIcon = (
+    <Animated.View
+      style={{
+        opacity: indicatorAnim,
+        marginBottom: 5,
+        transform: [
+          {
+            scale: indicatorAnim,
+          },
+        ],
+      }}
+    >
+      <FontAwesome5 name="hand-point-right" size={22} color={"#fff"} />
+    </Animated.View>
+  );
+
+  // Fetch news and weather info
   useEffect(() => {
     fetchWeatherAndNews(true);
+
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      interruptionMode: "doNotMix",
+    });
   }, []);
 
+  // Update listening time of user for current song
   useEffect(() => {
     const clearListenInterval = () => {
       if (listenIntervalRef.current) {
@@ -746,6 +900,7 @@ export default function HomeScreen() {
     };
   }, [playerStatus.playing, currentSongIndex]);
 
+  // Replace audio urls with their final downloaded urls and play audio player when song changes
   useEffect(() => {
     const audios = Object.entries(downloadedAudios);
     audios.forEach(([idx, uri]) => {
@@ -766,12 +921,15 @@ export default function HomeScreen() {
 
     // Auto playing song when previous or next button is pressed
     if (!currentSong) return;
-    player.play();
+    playAudioPlayer();
   }, [currentSong?.audioUrl]);
 
+  // Plays next song once current one finishes
   useEffect(() => {
     const index = currentSongIndex;
     if (playerStatus.didJustFinish) {
+      setSongJustFinished(true);
+
       updateTrackInDB(
         {
           completed: true,
@@ -784,21 +942,26 @@ export default function HomeScreen() {
     }
   }, [playerStatus.playing]);
 
+  // Start generating next song once listening threshold reaches
   useEffect(() => {
-    if (generateTimerRef.current) {
-      clearTimeout(generateTimerRef.current);
-      generateTimerRef.current = null;
-    }
+    const clearGenerateTimerInterval = () => {
+      if (generateTimerRef.current) {
+        clearTimeout(generateTimerRef.current);
+        generateTimerRef.current = null;
+      }
+    };
+    clearGenerateTimerInterval();
 
+    const index = currentSongIndex;
     if (
       !playerStatus.playing ||
       !currentSong ||
-      generationLockedForIndex === currentSongIndex ||
-      songQueue.length > currentSongIndex + 1
+      generationLockedForIndex === index ||
+      songQueue.length > index + 1
     ) {
       return;
     }
-    if (currentSongIndex + 1 >= emotionPath.length) {
+    if (index + 1 >= emotionPath.length) {
       console.warn(
         "Could not generate next song as songs generation completed for all the emotions in the path!",
       );
@@ -807,25 +970,32 @@ export default function HomeScreen() {
 
     generateTimerRef.current = setTimeout(() => {
       console.log(
-        `--Listen threshold reached. Generating next song for index ${currentSongIndex}`,
+        `--Listen threshold reached. Generating next song for index ${index}`,
       );
 
-      setGenerationLockedForIndex(currentSongIndex);
+      setGenerationLockedForIndex(index);
       generateNextSong();
     }, LISTEN_BEFORE_GENERATE_MS);
 
-    return () => {
-      if (generateTimerRef.current) {
-        clearTimeout(generateTimerRef.current);
-        generateTimerRef.current = null;
+    setTimeout(() => {
+      if (trackStoredInDB[index]) {
+        unlockRating(index);
       }
+    }, 10_000);
+
+    return () => {
+      clearGenerateTimerInterval();
     };
   }, [playerStatus.playing, currentSongIndex, currentSong?.audioUrl]);
 
+  // Reset states when song changes
   useEffect(() => {
     setGenerationLockedForIndex(null);
+    setRatingUnlocked(false);
+    setSongJustFinished(false);
   }, [currentSongIndex]);
 
+  // Download finalURL song when it's ready
   useEffect(() => {
     onFinalReady(async (taskId, finalUrl) => {
       const index = songQueue.findIndex((s) => s?.id === taskId);
@@ -846,7 +1016,7 @@ export default function HomeScreen() {
         player.replace(localUri);
         await new Promise((r) => setTimeout(r, 500));
         await player.seekTo(player?.currentTime || prevTime);
-        player.play();
+        playAudioPlayer();
       } else {
         setSongQueue((prev) => {
           const updated = [...prev];
@@ -868,6 +1038,7 @@ export default function HomeScreen() {
     });
   }, [songQueue, currentSongIndex]);
 
+  // Sync duration slider value with song duration
   useEffect(() => {
     if (!playerStatus.isLoaded) return;
 
@@ -876,9 +1047,84 @@ export default function HomeScreen() {
     }
   }, [playerStatus.currentTime, isSliding]);
 
+  // Automatic playback transition to the next song when it finishes generating
+  useEffect(() => {
+    if (songJustFinished && songQueue.length > currentSongIndex + 1) {
+      handleNextSong();
+    }
+  }, [songQueue.length, songJustFinished]);
+
+  // Pulse animation — fires when unlocked but not yet rated
+  useEffect(() => {
+    if (ratingUnlocked && songRatings[currentSongIndex] === undefined) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(nudgeAnim, {
+            toValue: 1.25,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(nudgeAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+        ]),
+      ).start();
+    } else {
+      nudgeAnim.stopAnimation();
+      nudgeAnim.setValue(1);
+    }
+  }, [ratingUnlocked, currentSongIndex, songRatings]);
+
+  // Scroll the view towards lyrics container once the lyrics are ready
+  useEffect(() => {
+    if (!currentSongLyrics) return;
+
+    setTimeout(() => {
+      lyricsRef.current?.measureLayout(
+        scrollViewRef.current as any,
+        (_, y) => {
+          scrollViewRef.current?.scrollTo({
+            y: Math.max(0, y - 40),
+            animated: true,
+          });
+        },
+        () => console.warn("Can't scroll to lyrics!"),
+      );
+    }, 300);
+  }, [currentSongLyrics]);
+
+  // Pulse animation - Start and Target emotion inputs
+  useEffect(() => {
+    if (indicatorIcon) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(indicatorAnim, {
+            toValue: 0.7,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(indicatorAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      loop.start();
+
+      return () => loop.stop();
+    } else {
+      indicatorAnim.stopAnimation();
+      indicatorAnim.setValue(1);
+    }
+  }, [indicatorIcon]);
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#171A1F" }}>
       <ScrollView
+        ref={scrollViewRef}
         style={{ flex: 1 }}
         contentContainerStyle={{ padding: 20, paddingBottom: 150 }}
         keyboardShouldPersistTaps="handled"
@@ -886,61 +1132,78 @@ export default function HomeScreen() {
         onContentSizeChange={(w, h) => console.log("Content height:", h)}
         nestedScrollEnabled={true}
       >
-        <Text style={styles.header}>Emotion to Lyric Generator</Text>
+        {/* Header with profile icon */}
+        <View
+          style={[
+            {
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 5,
+            },
+          ]}
+        >
+          <Text style={styles.header}>Emotion to Song Generator</Text>
+          <Pressable
+            onPress={handleEditProfile}
+            disabled={loading}
+            hitSlop={12}
+            style={{ opacity: loading ? 0.4 : 1 }}
+            accessibilityLabel="Edit profile details"
+          >
+            <FontAwesome5 name="user-circle" size={24} color="#B07FE0" />
+          </Pressable>
+        </View>
 
-        {/* <EmotionDropdown
-          label={
-            user?.nickName
-              ? `Hi ${user.nickName}, how are you feeling today?`
-              : "How are you feeling today?"
-          }
-          placeholder="Sad, Calm, Mysterious, Tense..."
-          value={input.currentMood}
-          moods={EMOTION_OPTIONS}
-          icon={<FontAwesome5 name="microphone" size={16} color="#fff" />}
-          onChange={(t) => handleInputChange("currentMood", t)}
-        />
-        <EmotionDropdown
-          label="How would you like to feel?"
-          placeholder="Joyful, Excited, Cheerful, Energetic..."
-          value={input.desiredMood}
-          moods={EMOTION_OPTIONS}
-          icon={<FontAwesome5 name="bolt" size={16} color="#fff" />}
-          onChange={(t) => handleInputChange("desiredMood", t)}
-        /> */}
+        {/* Current and Desired Emotion selection */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "flex-end",
+            gap: 12,
+            marginBottom: 20,
+          }}
+        >
+          <EmotionPicker
+            shortLabel="Feeling now"
+            label={
+              user?.nickName
+                ? `Hi ${user.nickName}, how are you feeling today?`
+                : "How are you feeling today?"
+            }
+            placeholderIcon="🎙️"
+            placeholder="Sad, Calm, Mysterious, Tense..."
+            emotion={input.currentMood}
+            quad={input.currentQuad}
+            onChange={(payload) => handleChangeEmotion(payload, "curr")}
+            allowCustomEmotion
+            indicatorIcon={indicatorIcon === "current" ? AnimatedIcon : null}
+          />
 
-        {/* TODO 
-          - update value and onChange props correctly
-        */}
-        <EmotionPicker
-          label="How are you feeling today?"
-          placeholderIcon="🎙️"
-          placeholder="Sad, Calm, Mysterious, Tense..."
-          // value={input.currentMood}
-          // onChange={(t) => handleInputChange("currentMood", t)}
-          value={currentEmotion}
-          onChange={setCurrentEmotion}
-          allowCustomEmotion
-        />
-        <EmotionPicker
-          label="How would you like to feel?"
-          placeholderIcon="⚡"
-          placeholder="Joyful, Excited, Cheerful, Energetic..."
-          // value={input.desiredMood}
-          // onChange={(t) => handleInputChange("desiredMood", t)}
-          value={desiredEmotion}
-          onChange={setDesiredEmotion}
-          allowedQuadrants={["sunny", "breezy"]}
-        />
+          <EmotionPicker
+            shortLabel="Want to feel"
+            label="How would you like to feel?"
+            placeholderIcon="⚡"
+            placeholder="Joyful, Excited, Cheerful, Energetic..."
+            emotion={input.desiredMood}
+            quad={input.desiredQuad}
+            onChange={(payload) => handleChangeEmotion(payload, "desired")}
+            allowedQuadrants={["sunny", "breezy"]}
+            indicatorIcon={indicatorIcon === "desired" ? AnimatedIcon : null}
+          />
+        </View>
 
+        {/* Activity input */}
         <EmotionInput
           label="Are you starting some activity?"
           placeholder="Workout, Walking, Studying, Meditating..."
           icon={<FontAwesome5 name="running" size={16} color="#fff" />}
           value={input.activity}
           onChange={(t) => handleInputChange("activity", t)}
+          indicatorIcon={indicatorIcon === "activity" ? AnimatedIcon : null}
         />
 
+        {/* Health Provider */}
         {!healthData && (
           <HealthProviderSection
             updateHealthData={(data) => setHealthData(data)}
@@ -949,126 +1212,195 @@ export default function HomeScreen() {
           />
         )}
 
+        {/* Weather and News info */}
         <Biomarkers
           healthData={healthData}
           weatherData={weatherData}
           newsData={newsData}
         />
 
+        {/* Generate button */}
         {isFormComplete && healthData && (
           <Pressable
             onPress={generateLyricsAndSong}
-            disabled={generatingLyrics || generatingSong}
+            disabled={loading}
             style={styles.generateButton}
           >
             <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}>
-              {generatingLyrics || generatingSong
-                ? "Creating Magic..."
-                : "Generate Lyrics & Song"}
+              {loading ? "Creating Magic..." : "Generate Lyrics & Song"}
             </Text>
           </Pressable>
         )}
+        {loading && (
+          <LoadingPhrases
+            style={{ marginTop: 30 }}
+            phrases={[
+              "Composing your song...",
+              "Weaving melodies to match your mood...",
+              "Crafting lyrics just for this moment...",
+              "Almost ready — your song is taking shape...",
+            ]}
+          />
+        )}
 
         {/* Display  lyrics and Audio Player */}
-        {((SHOW_LYRICS && currentSongLyrics) || currentSong) && (
+        {currentSong && (
           <View style={styles.stepContainer}>
-            {SHOW_LYRICS && !!currentSongLyrics && (
-              <View>
-                <Text style={styles.lyricsTitle}>Your Song</Text>
+            {SHOW_LYRICS && currentSongLyrics && (
+              <View ref={lyricsRef}>
+                <Text style={styles.lyricsTitle}>Your Song Lyrics</Text>
                 <LyricAnimator
                   text={currentSongLyrics}
                   currentTimeMs={currentTime * 1000}
                   songDurationMs={(duration || DEFAULT_DURATION) * 1000}
+                  alignedWords={currentSong?.alignedWords || []}
+                  autoScroll={true}
+                  highlightWords={true}
                 />
               </View>
             )}
 
-            {currentSong && (
-              <>
-                {currentSong?.title && (
-                  <Text
-                    style={{
-                      marginTop: 15,
-                      marginBottom: 10,
-                      fontSize: 16,
-                      fontWeight: "bold",
-                      color: "#fff",
-                      textAlign: "center",
-                    }}
-                  >
-                    🎵 {currentSong.title}
-                  </Text>
+            <>
+              {currentSong?.title && (
+                <Text
+                  style={{
+                    marginTop: 15,
+                    marginBottom: 10,
+                    fontSize: 16,
+                    fontWeight: "bold",
+                    color: "#fff",
+                    textAlign: "center",
+                  }}
+                >
+                  {/* 🎵 {currentSong.title} */}
+                  🎵 Your Personalized Song {currentSongIndex + 1}
+                </Text>
+              )}
+
+              <View style={styles.progressContainer}>
+                <Text style={styles.timeText}>{formatTime(currentTime)}</Text>
+
+                <Slider
+                  style={{ flex: 1, marginHorizontal: 10 }}
+                  minimumValue={0}
+                  maximumValue={duration || 150}
+                  value={sliderValue}
+                  minimumTrackTintColor="#9b5cff"
+                  maximumTrackTintColor="#444"
+                  thumbTintColor="#fff"
+                  onSlidingStart={() => setIsSliding(true)}
+                  onValueChange={(value) => setSliderValue(value)}
+                  onSlidingComplete={(value) => {
+                    setIsSliding(false);
+                    handleSlidingComplete(value);
+                  }}
+                />
+
+                <Text style={styles.timeText}>
+                  {formatTime(duration || 150)}
+                </Text>
+              </View>
+
+              <View style={styles.playerBar}>
+                <CommonButton
+                  onPress={handlePrevSong}
+                  disabled={currentSongIndex === 0}
+                  icon={
+                    <FontAwesome5 name="step-backward" size={22} color="#fff" />
+                  }
+                />
+
+                {playerStatus.isBuffering || !playerStatus.isLoaded ? (
+                  <ActivityIndicator color="#fff" size={30} />
+                ) : (
+                  <CommonButton
+                    onPress={playSound}
+                    style={styles.playButton}
+                    icon={
+                      <FontAwesome5
+                        name={playerStatus.playing ? "pause" : "play"}
+                        size={24}
+                        color="#9b5cff"
+                      />
+                    }
+                  />
                 )}
 
-                <View style={styles.progressContainer}>
-                  <Text style={styles.timeText}>{formatTime(currentTime)}</Text>
-
-                  <Slider
-                    style={{ flex: 1, marginHorizontal: 10 }}
-                    minimumValue={0}
-                    maximumValue={duration || 150}
-                    value={sliderValue}
-                    minimumTrackTintColor="#9b5cff"
-                    maximumTrackTintColor="#444"
-                    thumbTintColor="#fff"
-                    onSlidingStart={() => setIsSliding(true)}
-                    onValueChange={(value) => setSliderValue(value)}
-                    onSlidingComplete={(value) => {
-                      setIsSliding(false);
-                      handleSlidingComplete(value);
-                    }}
-                  />
-
-                  <Text style={styles.timeText}>
-                    {formatTime(duration || 150)}
-                  </Text>
-                </View>
-
-                <View style={styles.playerBar}>
-                  <CommonButton
-                    onPress={handlePrevSong}
-                    disabled={currentSongIndex === 0}
-                    icon={
-                      <FontAwesome5
-                        name="step-backward"
-                        size={22}
-                        color="#fff"
-                      />
-                    }
-                  />
-
-                  {playerStatus.isBuffering || !playerStatus.isLoaded ? (
-                    <ActivityIndicator color="#fff" size={30} />
-                  ) : (
-                    <CommonButton
-                      onPress={playSound}
-                      style={styles.playButton}
-                      icon={
-                        <FontAwesome5
-                          name={playerStatus.playing ? "pause" : "play"}
-                          size={24}
-                          color="#9b5cff"
-                        />
-                      }
-                    />
-                  )}
-
-                  <CommonButton
-                    onPress={handleNextSong}
-                    disabled={currentSongIndex === songQueue.length - 1}
-                    icon={
-                      <FontAwesome5
-                        name="step-forward"
-                        size={22}
-                        color="#fff"
-                      />
-                    }
-                  />
-                </View>
-              </>
-            )}
+                <CommonButton
+                  onPress={handleNextSong}
+                  disabled={currentSongIndex === songQueue.length - 1}
+                  icon={
+                    <FontAwesome5 name="step-forward" size={22} color="#fff" />
+                  }
+                />
+              </View>
+            </>
           </View>
         )}
+
+        {/* Thumbs Up/Down buttons */}
+        {!songRatings[currentSongIndex] &&
+          ratingUnlocked &&
+          songQueue?.length > 0 && (
+            <View
+              style={{
+                height: 40,
+                flexDirection: "row",
+                alignItems: "center",
+                marginHorizontal: 10,
+                marginTop: 5,
+              }}
+            >
+              <Animated.View
+                style={{
+                  flexDirection: "row",
+                  marginLeft: 0,
+                  gap: 12,
+                  transform: [
+                    {
+                      scale: nudgeAnim,
+                    },
+                  ],
+                }}
+              >
+                <Pressable
+                  onPress={() => handleRate("up")}
+                  style={{
+                    padding: 8,
+                    borderRadius: 20,
+                  }}
+                >
+                  <FontAwesome5 name="thumbs-up" size={20} color={"#fff"} />
+                </Pressable>
+
+                <Pressable
+                  onPress={() => handleRate("down")}
+                  style={{
+                    padding: 8,
+                    borderRadius: 20,
+                  }}
+                >
+                  <FontAwesome5 name="thumbs-down" size={20} color={"#fff"} />
+                </Pressable>
+              </Animated.View>
+            </View>
+          )}
+
+        {/* Loading Phrases for next song */}
+        {nextSongLoading && songJustFinished && (
+          <LoadingPhrases
+            style={{ marginTop: 30 }}
+            phrases={[
+              "Composing your next song...",
+              "Weaving melodies to match your mood...",
+              "Crafting lyrics just for this moment...",
+              "Almost ready — your song is taking shape...",
+            ]}
+          />
+        )}
+
+        {/* Debug options modal */}
+        <DebugOptionsModal isHomeScreen={true} />
 
         <View style={{ marginTop: 20, opacity: 0.5 }}>
           <Text style={{ color: "#ece5e5", fontSize: 12 }}>
@@ -1078,9 +1410,6 @@ export default function HomeScreen() {
             Number of songs generated: {songQueue.length}
           </Text>
         </View>
-
-        {/* Debug options modal */}
-        <DebugOptionsModal isHomeScreen={true} />
 
         {songQueue?.length ? (
           <View style={{ marginTop: 20, opacity: 0.5 }}>
@@ -1120,98 +1449,9 @@ export default function HomeScreen() {
   );
 }
 
-function buildLyricPrompt({
-  input,
-  mood,
-  valence,
-  arousal,
-  healthData,
-  weatherData,
-  newsData,
-  strategy,
-}: {
-  input: {
-    activity: string;
-    nickName?: string;
-    age: string;
-    favoriteGenre: string;
-    favoriteBand: string;
-  };
-  mood: string;
-  valence: number;
-  arousal: number;
-  healthData: HealthData;
-  weatherData: WeatherData | null;
-  newsData: NewsData | null;
-  strategy: string;
-}): string {
-  // Map strategy to musical guidance
-  const strategyGuidance: Record<string, string> = {
-    on_track:
-      "The listener is responding well. Continue the current emotional trajectory.",
-    slow_down:
-      "The listener's arousal is higher than expected (possibly stressed/anxious). " +
-      "Use slower tempo, softer instrumentation, and more calming imagery to help them relax.",
-    intensify:
-      "The listener is calmer than expected. " +
-      "Slightly increase energy with more rhythmic elements and uplifting imagery.",
-    hold_steady:
-      "Maintain the current energy level. The listener is in a transitional state.",
-  };
-
-  return `
-    You are a creative songwriter. Generate original song lyrics personalized to the following inputs:
-
-    USER
-    ${input?.nickName && `- Name: ${input.nickName}`}
-    - Age: ${input.age}
-
-    MUSIC STYLE
-    - Genre preference: ${input.favoriteGenre}
-    - Stylistic influence (do NOT imitate or quote): ${input.favoriteBand}
-    - Target mood: ${mood}
-    - Emotional coordinates: Valence ${valence} (${valence > 0 ? "positive" : "negative"}), Arousal ${arousal} (${arousal > 0.5 ? "high energy" : "low energy"})
-
-    PHYSICAL CONTEXT
-    - Heart rate: ${healthData.heartRate ?? "N/A"} bpm (last 5 min)
-    - Recent activity: ${healthData.steps ?? "N/A"} steps (last 5 min)
-    - HRV: ${healthData.hrv ?? "N/A"} ms
-    - Estimated emotional arousal: ${healthData.arousal !== null ? (healthData.arousal * 100).toFixed(0) + "%" : "N/A"}
-    - Current or upcoming activity: ${input.activity || "None specified"}
-
-    BIOMETRIC ADAPTATION
-    ${strategyGuidance[strategy] || strategyGuidance.on_track}
-
-    ENVIRONMENT
-    - Location: ${weatherData?.city || "Unknown"}
-    - Weather: ${weatherData?.temperature ? `${weatherData.temperature}°C, ${weatherData.description}` : "Unknown"}
-    - News mood cue (optional): ${newsData?.headline?.[0] || "N/A"}
-
-    TASK:
-    Write cohesive song lyrics.
-    1. Structure: Verse 1, Chorus, Verse 2, Chorus (exact repeat), and Outro.
-    2. Tone: Match the target mood and emotional coordinates above.
-    3. Length: Target ~180–220 words total.
-    4. Integration: Integrate physical state, environment, and biometric adaptation guidance subtly and metaphorically.
-    5. Originality: Avoid clichés and generic motivational phrases.
-    6. Style: Use the genre and stylistic influence only for rhythm, imagery, and tone guidance—do not imitate or quote them.
-
-    OUTPUT FORMAT (STRICT):
-    Return ONLY valid JSON. No preamble or markdown. Use the following structure:
-    {
-      "lyrics": {
-        "verse1": "...",
-        "chorus": "...",
-        "verse2": "...",
-        "outro": "..."
-      }
-    }
-  `;
-}
-
 const styles = StyleSheet.create({
   header: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "bold",
     color: "#fff",
     textAlign: "center",

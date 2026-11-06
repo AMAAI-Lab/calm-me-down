@@ -1,14 +1,14 @@
+import { fetchHealthConnectData, HealthData } from "@/services/HealthService";
 import { useCallback, useEffect, useState } from "react";
-import { Platform } from "react-native";
+import { Alert, Platform } from "react-native";
 import {
+  getGrantedPermissions,
   getSdkStatus,
   initialize,
-  readRecords,
   requestPermission,
   SdkAvailabilityStatus,
 } from "react-native-health-connect";
 import type { Permission } from "react-native-health-connect/lib/typescript/types";
-import { fetchHealthConnectData, HealthData } from "@/services/HealthService";
 
 export type HCSdkStatus =
   | "available"
@@ -48,26 +48,39 @@ export function useHealthConnect(updateHealthData: (data: HealthData) => void) {
       if (!initialized) return;
       setIsInitialized(true);
 
-      const alreadyGranted = await probePermissions();
+      const alreadyGranted = await checkPermissions();
       setIsAuthorized(alreadyGranted);
-    } catch {
+    } catch (e: any) {
+      console.error(
+        "Error while initializing Health_Connect: ",
+        e?.message || e,
+      );
       setSdkStatus("unavailable");
     }
   };
 
-  const probePermissions = async (): Promise<boolean> => {
+  const checkPermissions = async (): Promise<boolean> => {
     try {
-      const now = new Date();
-      const probe = new Date(now.getTime() - 60_000);
-      await readRecords("Steps", {
-        timeRangeFilter: {
-          operator: "between",
-          startTime: probe.toISOString(),
-          endTime: now.toISOString(),
-        },
-      });
-      return true;
-    } catch {
+      const granted = await getGrantedPermissions();
+
+      const hasSteps = granted.some(
+        (p) => p.recordType === "Steps" && p.accessType === "read",
+      );
+      const hasHeartRate = granted.some(
+        (p) => p.recordType === "HeartRate" && p.accessType === "read",
+      );
+      const hasHRV = granted.some(
+        (p) =>
+          p.recordType === "HeartRateVariabilityRmssd" &&
+          p.accessType === "read",
+      );
+
+      return hasSteps || hasHeartRate || hasHRV;
+    } catch (e: any) {
+      console.error(
+        "Error while checking Health Connect permissions:",
+        e?.message || e,
+      );
       return false;
     }
   };
@@ -78,6 +91,8 @@ export function useHealthConnect(updateHealthData: (data: HealthData) => void) {
       // Re-check SDK in case user installed HC after app launched
       if (sdkStatus !== "available") {
         const status = await getSdkStatus();
+        console.log("Health Connect SDK status:", status);
+
         if (status !== SdkAvailabilityStatus.SDK_AVAILABLE) {
           setSdkStatus("not_installed");
           return;
@@ -88,23 +103,43 @@ export function useHealthConnect(updateHealthData: (data: HealthData) => void) {
       // Ensure initialized
       if (!isInitialized) {
         const ok = await initialize();
+        console.log("Health Connect initialized:", ok);
+
         if (!ok) return;
         setIsInitialized(true);
       }
 
       // Request permissions if not yet granted
       if (!isAuthorized) {
-        const granted = await requestPermission(HC_PERMISSIONS);
-        const hasMinimum =
-          granted.some((p) => p.recordType === "Steps") ||
-          granted.some((p) => p.recordType === "HeartRate");
+        const requestedPermissions = await requestPermission(HC_PERMISSIONS);
+        console.log(
+          "Permissions returned after requesting:",
+          JSON.stringify(requestedPermissions),
+        );
 
-        if (!hasMinimum) return;
+        const hasPermission = await checkPermissions();
+        if (!hasPermission) {
+          Alert.alert(
+            "Health Connect Permission Required",
+            "Please allow access to at least one health data type in Health Connect settings.",
+          );
+          return;
+        }
         setIsAuthorized(true);
       }
 
       const data = await fetchHealthConnectData();
       updateHealthData(data);
+    } catch (e: any) {
+      console.error(
+        "Error while Authorize and Fetch through Health Connect:",
+        e?.message || e,
+      );
+
+      Alert.alert(
+        "Health Connect Error",
+        e?.message || "Unable to fetch health data.",
+      );
     } finally {
       setLoading(false);
     }

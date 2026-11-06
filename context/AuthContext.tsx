@@ -1,18 +1,20 @@
+import { UserProfile } from "@/constants/appConstants";
+import { saveUserInDB } from "@/services/DbService";
+import { checkForParticipantEmail } from "@/util/commonUtils";
 import { createContext, useContext, useEffect, useState } from "react";
 import {
+  clearFeedbackSubmitted,
+  clearPlaylistFeedback,
   clearStoredGenres,
   getUserLocal,
   saveUserLocal,
 } from "../services/LocalUserService";
-import { UserProfile } from "@/constants/appConstants";
-import { saveUserInDB } from "@/services/DbService";
-import { checkForParticipantEmail } from "@/util/commonUtils";
 
 type AuthContextType = {
   user: UserProfile | null;
   loading: boolean;
   isParticipant: boolean;
-  login: (user: UserProfile) => Promise<boolean>;
+  login: (user: UserProfile, isEdit?: boolean) => Promise<boolean>;
   logout: () => Promise<void>;
 };
 
@@ -36,7 +38,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     })();
   }, []);
 
-  const login = async (userData: UserProfile): Promise<boolean> => {
+  const clearStates = async (isEdit?: boolean) => {
+    await clearFeedbackSubmitted();
+    await clearPlaylistFeedback();
+
+    if (!isEdit) {
+      await clearStoredGenres();
+    }
+  };
+
+  const login = async (
+    userData: UserProfile,
+    isEdit?: boolean,
+  ): Promise<boolean> => {
     await saveUserInDB(userData);
     await saveUserLocal(userData);
     setUser(userData);
@@ -44,7 +58,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const isParticipantEmail = checkForParticipantEmail(userData?.email || "");
     setIsParticipant(isParticipantEmail);
 
-    await clearStoredGenres();
+    await clearStates(isEdit);
+
     return isParticipantEmail;
   };
 

@@ -19,7 +19,7 @@ export const checkForParticipantEmail = (str: string): boolean => {
   }
   if (lower.startsWith("p")) {
     const num = Number(lower.slice(1));
-    return num >= 1 && num <= 40;
+    return (num >= 1 && num <= 40) || (num >= 101 && num <= 140);
   }
 
   return false;

@@ -101,21 +101,16 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type TargetEmotion = "relaxed" | "joyful";
-type PlaylistType = "Trajectory" | "SavedPlaylist";
-type PlaylistId = "A" | "B" | "C" | "D";
+type PlaylistType = "AI_Trajectory" | "Saved_Playlist";
+type PlaylistId = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
 type Phase = "setup" | "running" | "complete";
+type ActivityCtx = "Sitting in Lab" | "Walking Outside";
 
 interface PlaylistDef {
   targetEmotion: TargetEmotion;
   playlistType: PlaylistType;
+  activity: ActivityCtx;
 }
-
-const ACTIVITY_SEQUENCE: string[] = [
-  "Sitting in Lab",
-  "Sitting in Lab",
-  "Walking Outside",
-  "Walking Outside",
-];
 
 const C = {
   bg: "#0D0D14",
@@ -129,42 +124,85 @@ const C = {
 const PLAYLIST_DEFS: Record<PlaylistId, PlaylistDef> = {
   A: {
     targetEmotion: "relaxed",
-    playlistType: "SavedPlaylist",
+    activity: "Sitting in Lab",
+    playlistType: "AI_Trajectory",
   },
   B: {
-    targetEmotion: "joyful",
-    playlistType: "Trajectory",
+    targetEmotion: "relaxed",
+    activity: "Walking Outside",
+    playlistType: "Saved_Playlist",
   },
   C: {
-    targetEmotion: "joyful",
-    playlistType: "SavedPlaylist",
+    targetEmotion: "relaxed",
+    activity: "Sitting in Lab",
+    playlistType: "Saved_Playlist",
   },
   D: {
     targetEmotion: "relaxed",
-    playlistType: "Trajectory",
+    activity: "Walking Outside",
+    playlistType: "AI_Trajectory",
+  },
+  E: {
+    targetEmotion: "joyful",
+    activity: "Sitting in Lab",
+    playlistType: "AI_Trajectory",
+  },
+  F: {
+    targetEmotion: "joyful",
+    activity: "Walking Outside",
+    playlistType: "Saved_Playlist",
+  },
+  G: {
+    targetEmotion: "joyful",
+    activity: "Sitting in Lab",
+    playlistType: "Saved_Playlist",
+  },
+  H: {
+    targetEmotion: "joyful",
+    activity: "Walking Outside",
+    playlistType: "AI_Trajectory",
   },
 };
 
-const SEQUENCES: Record<TargetEmotion, [PlaylistId[], PlaylistId[]]> = {
+const SEQUENCES: Record<TargetEmotion, PlaylistId[][]> = {
   relaxed: [
-    ["A", "B", "C", "D"],
-    ["D", "C", "B", "A"],
+    ["A", "G", "B", "H"],
+    ["B", "H", "A", "G"],
+    ["C", "F", "D", "E"],
+    ["D", "E", "C", "F"],
   ],
   joyful: [
-    ["C", "D", "A", "B"],
-    ["B", "A", "D", "C"],
+    ["E", "C", "F", "D"],
+    ["F", "D", "E", "C"],
+    ["G", "B", "H", "A"],
+    ["H", "A", "G", "B"],
   ],
 };
 
 const DEFAULT_DURATION = 120;
 
-function pickSequence(target: TargetEmotion): PlaylistId[] {
-  let randomIndex = Math.random() < 0.5 ? 0 : 1;
-  if (DEBUG_MODE) {
-    randomIndex = 0;
-  }
+function pickSequence(
+  target: TargetEmotion,
+  actSeq: ActivityCtx[],
+): PlaylistId[] {
+  const pickedSequence = SEQUENCES[target].find((currSeq) => {
+    for (let i = 0; i < currSeq.length; i++) {
+      if (PLAYLIST_DEFS[currSeq[i]].activity !== actSeq[i]) {
+        return false;
+      }
+    }
+    return true;
+  });
 
-  return SEQUENCES[target][randomIndex];
+  const randomIndex = [0, 1, 2, 3].sort(() => Math.random() - 0.5)[0];
+  return pickedSequence || SEQUENCES[target][randomIndex || 0];
+
+  // let randomIndex = [0, 1, 2, 3].sort(() => Math.random() - 0.5)[0];
+  // if (DEBUG_MODE) {
+  //   randomIndex = 1;
+  // }
+
+  // return SEQUENCES[target][randomIndex || 0];
 }
 
 export default function ParticipantsScreen() {
@@ -190,8 +228,6 @@ export default function ParticipantsScreen() {
   const [healthProvider, setHealthProvider] =
     useState<HealthProvider>("Apple Health");
 
-  // const [isPreFeedbackMessage, setIsPreFeedbackMessage] = useState(true);
-  // const [showEmotionModal, setShowEmotionModal] = useState(false);
   const [songJustFinished, setSongJustFinished] = useState(false);
   const [nextSongLoading, setNextSongLoading] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -234,7 +270,7 @@ export default function ParticipantsScreen() {
   const nudgeAnim = useRef(new Animated.Value(1)).current;
   const moodButtonAnim = useRef(new Animated.Value(1)).current;
   const indicatorAnim = useRef(new Animated.Value(1)).current;
-  const listenIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const listenIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const generateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const lyricsRef = useRef<View>(null);
@@ -281,6 +317,14 @@ export default function ParticipantsScreen() {
     startEmotion,
   ]);
 
+  const activitySeq = useMemo(() => {
+    const randomIndex = [0, 1, 2, 3].sort(() => Math.random() - 0.5)[0];
+    const randomSeq = SEQUENCES.relaxed[randomIndex || 0];
+
+    const actSeq = randomSeq.map((id) => PLAYLIST_DEFS[id].activity);
+    return actSeq;
+  }, []);
+
   const currPlaylistFinished =
     emotionTrajectory.length > 0 &&
     currentSongIndex + 1 >= emotionTrajectory.length;
@@ -323,7 +367,6 @@ export default function ParticipantsScreen() {
   const isMoodMeterDisabled =
     feedbackSubmitted?.[playlistIdx]?.post &&
     !emotionCaptured?.[playlistIdx]?.post;
-  const currentActivity = ACTIVITY_SEQUENCE?.[playlistIdx] || "Sitting in Lab";
   const isPreGen = NON_AI_PLAYLIST_TYPE === "PRE_GEN";
   const showNextPlaylistBtn =
     (playlistIdx > 0 && playlistReset) ||
@@ -405,7 +448,7 @@ export default function ParticipantsScreen() {
     const { weather, news } = (await fetchWeatherAndNews()) || {};
     const addProfession = ADD_PROFESSION_TO_PROMPT && !!user?.profession;
     const activityContext =
-      currentActivity === "Walking Outside" ? "Walking" : "Sitting";
+      activitySeq?.[playlistIdx] === "Walking Outside" ? "Walking" : "Sitting";
     const about = ADD_ABOUT_TO_PROMPT && user?.about?.trim();
     const newsHeadlines = (news?.headline || [])
       .map((h, i) => `  ${i + 1}. "${h}"`)
@@ -611,7 +654,7 @@ export default function ParticipantsScreen() {
   ) => {
     await clearStates();
 
-    setPlaylistType("Trajectory");
+    setPlaylistType("AI_Trajectory");
     const currHealthData =
       healthData && (healthData?.heartRate || healthData?.steps)
         ? healthData
@@ -718,7 +761,7 @@ export default function ParticipantsScreen() {
         newTrajectoryID,
       );
       await saveTrackId(trackRes?.id!, trackRes?.songIdx || 0);
-      setTrackStoredInDB((prev) => ({ ...prev, [index]: true }));
+      setTrackStoredInDB({ 0: true });
     } catch (err) {
       console.error("Error updating DB: ", err);
     }
@@ -734,7 +777,7 @@ export default function ParticipantsScreen() {
       await fetchWeatherAndNews();
     }
 
-    setPlaylistType("SavedPlaylist");
+    setPlaylistType("Saved_Playlist");
     const currTrajectory = generateTrajectory(givenTargetEmotion);
     setEmotionTrajectory(currTrajectory);
 
@@ -807,8 +850,9 @@ export default function ParticipantsScreen() {
 
       let seq = sequence;
       if (!seq?.length) {
-        seq = pickSequence(targetEmotion);
+        seq = pickSequence(targetEmotion, activitySeq);
         setSequence(seq);
+        console.log("Picked sequence: ", seq);
       }
 
       const newSessionID = await createMusicSession(
@@ -822,7 +866,7 @@ export default function ParticipantsScreen() {
       await saveSessionId(newSessionID);
 
       const firstPlaylist = PLAYLIST_DEFS[seq[0]];
-      if (firstPlaylist.playlistType === "Trajectory") {
+      if (firstPlaylist.playlistType === "AI_Trajectory") {
         await generateLyricsAndSong();
       } else {
         await generateSavedPlaylist();
@@ -853,7 +897,7 @@ export default function ParticipantsScreen() {
       const newPlaylistDef = PLAYLIST_DEFS[nextSequenceId];
 
       const { playlistType, targetEmotion: newTargetEmotion } = newPlaylistDef;
-      if (playlistType === "Trajectory") {
+      if (playlistType === "AI_Trajectory") {
         await generateLyricsAndSong(newTargetEmotion, nextPlaylistIdx);
       } else {
         await generateSavedPlaylist(newTargetEmotion, nextPlaylistIdx);
@@ -907,123 +951,6 @@ export default function ParticipantsScreen() {
     }
   };
 
-  const generateNextSong = async () => {
-    setNextSongLoading(true);
-    const nextSongIdx = currentSongIndex + 1;
-
-    if (songQueue.length > nextSongIdx) {
-      setNextSongLoading(false);
-      return;
-    }
-    if (nextSongIdx >= emotionTrajectory.length) {
-      console.warn(
-        "Could not generate next song! Songs generation completed for all the emotions in the path.",
-      );
-      setNextSongLoading(false);
-      setStartEmotion("");
-      return;
-    }
-
-    const latestHealthData = await fetchAppleHealthData(5);
-    const currentMood = emotionTrajectory?.[nextSongIdx] || "Relaxed";
-
-    console.log("Mood input for next song: ", currentMood);
-    console.log("HR for next song: ", latestHealthData.heartRate);
-    console.log("Steps for next song: ", latestHealthData.steps);
-
-    const favGenre = await getRandomGenres(user?.favoriteGenre || "");
-    const prompt = await buildLyricsPrompt(
-      currentMood,
-      latestHealthData,
-      favGenre,
-    );
-
-    // Generate song lyrics
-    let currentLyrics = "";
-    let suggestedMusicStyle = "";
-    try {
-      const { lyrics, musicStyle = "" } = (await generatelyrics(prompt)) || {};
-      if (lyrics) {
-        currentLyrics = lyrics;
-        setLyricsQueue((prev) => [...prev, lyrics]);
-      } else {
-        console.warn("Lyrics Generation failed for next song!");
-      }
-      suggestedMusicStyle = musicStyle;
-    } catch (error: any) {
-      console.error(
-        "An error occurred while generating lyrics for next song:",
-        error.message,
-      );
-    }
-
-    // Generate Song Audio
-    console.log(
-      `Generating next song with lyrics: "${(currentLyrics || "").substring(0, 150)}..."`,
-    );
-    let generatedStreamUrl = null;
-    let sunoOrgPayload = null;
-    const tempoRange = computeTempoRange(
-      currentMood || "relaxed",
-      latestHealthData.heartRate || 0,
-    );
-
-    try {
-      const generatedSong = await generateSong(
-        currentLyrics || "Uplifting song",
-        suggestedMusicStyle || favGenre || user?.favoriteGenre || "N/A",
-        currentMood,
-        nextSongIdx,
-        favGenre || user?.favoriteGenre,
-        user?.favoriteBand,
-        tempoRange,
-      );
-      if (generatedSong) {
-        setSongQueue((prev) => [...prev, generatedSong]);
-        generatedStreamUrl = generatedSong?.audioUrl;
-        sunoOrgPayload = generatedSong?.songProviderPayload || {};
-      } else {
-        console.warn("Could not generate next song audio.");
-      }
-    } catch (error: any) {
-      console.error(
-        "An error occurred while generating next song audio.",
-        error.message,
-      );
-      setGenerationLockedForIndex(null);
-    }
-
-    try {
-      const sessionId = await getSessionId();
-      const trajectoryID = await getTrajectoryId();
-      const trackRes = await addTrackToTrajectory(
-        user?.email!,
-        sessionId,
-        nextSongIdx,
-        {
-          mood: currentMood || "N/A",
-          streamUrl:
-            generatedStreamUrl || songQueue[nextSongIdx]?.audioUrl || "",
-          lyrics: currentLyrics,
-          lyricsPrompt: prompt,
-          sunoOrgPayload: { ...sunoOrgPayload },
-          heartRate: latestHealthData?.heartRate || "N/A",
-          steps: latestHealthData?.steps || "N/A",
-          suggestedAiMusicStyle: suggestedMusicStyle || "",
-          songNumber: nextSongIdx + 1,
-        },
-        true,
-        trajectoryID,
-      );
-
-      await saveTrackId(trackRes?.id!, trackRes?.songIdx || 0);
-      setTrackStoredInDB((prev) => ({ ...prev, [nextSongIdx]: true }));
-    } catch (err) {
-      console.error("Error while updating DB: ", err);
-    }
-
-    setNextSongLoading(false);
-  };
   const generateNextSongWithRetry = async () => {
     setNextSongLoading(true);
     const nextSongIdx = currentSongIndex + 1;
@@ -1266,19 +1193,6 @@ export default function ParticipantsScreen() {
     } as never);
   };
 
-  // const showModalIfBothFeedbackCaptured = (
-  //   feedbackSubmittedVal: any = null,
-  // ) => {
-  //   if (
-  //     !allPlaylistsCompleted &&
-  //     emotionCaptured?.[playlistIdx]?.post &&
-  //     (feedbackSubmittedVal || feedbackSubmitted)?.[playlistIdx]?.post
-  //   ) {
-  //     setShowEmotionModal(true);
-  //     setIsPreFeedbackMessage(true);
-  //   }
-  // };
-
   const handleStartEmotion = async (emotion: string) => {
     setStartEmotion(emotion);
     setCurrentEmotion(emotion);
@@ -1338,10 +1252,6 @@ export default function ParticipantsScreen() {
   useEffect(() => {
     fetchWeatherAndNews(true);
 
-    // setTimeout(() => {
-    //   setShowEmotionModal(true);
-    // }, 2000);
-
     setAudioModeAsync({
       playsInSilentMode: true, // iOS: play even when muted
       shouldPlayInBackground: true, // iOS + Android: keep going when backgrounded
@@ -1357,6 +1267,7 @@ export default function ParticipantsScreen() {
     }
   }, [online, nextSongFailed]);
 
+  // Automatic playback transition to the next song when it finishes generating
   useEffect(() => {
     if (
       songJustFinished &&
@@ -1430,11 +1341,6 @@ export default function ParticipantsScreen() {
         setShowRatingAlert(true);
       }
 
-      // if (index === emotionTrajectory.length - 1) {
-      //   setShowEmotionModal(true);
-      //   setIsPreFeedbackMessage(false);
-      // }
-
       updateTrackInDB(
         {
           completed: true,
@@ -1450,7 +1356,7 @@ export default function ParticipantsScreen() {
   useEffect(() => {
     const clearGenerateTimerInterval = () => {
       if (generateTimerRef.current) {
-        clearInterval(generateTimerRef.current);
+        clearTimeout(generateTimerRef.current);
         generateTimerRef.current = null;
       }
     };
@@ -1472,7 +1378,7 @@ export default function ParticipantsScreen() {
       );
 
       setGenerationLockedForIndex(index);
-      if (playlistType === "Trajectory") {
+      if (playlistType === "AI_Trajectory") {
         // generateNextSong();
         generateNextSongWithRetry();
       } else {
@@ -1543,7 +1449,7 @@ export default function ParticipantsScreen() {
     });
   }, [songQueue, currentSongIndex]);
 
-  // Update duration slider value
+  // Sync duration slider value with song duration
   useEffect(() => {
     if (!playerStatus.isLoaded) return;
 
@@ -1645,16 +1551,8 @@ export default function ParticipantsScreen() {
   // Unlocks start next playlist button once user has given a feedback
   useFocusEffect(
     useCallback(() => {
-      // const prevVal = { ...feedbackSubmitted };
-
       getFeedbackSubmitted().then((val) => {
         setFeedbackSubmitted(val);
-
-        // if (!prevVal?.[playlistIdx]?.post) {
-        //   setTimeout(() => {
-        //     showModalIfBothFeedbackCaptured(val);
-        //   }, 3000);
-        // }
       });
     }, []),
   );
@@ -1843,8 +1741,8 @@ export default function ParticipantsScreen() {
         </View>
       </View>
 
-      {/* Trajectory Number and Location Labels */}
-      {(currentSong || currentActivity) && (
+      {/* Playlist Number and Location Labels */}
+      {(currentSong || activitySeq.length > 0) && (
         <View style={styles.sectionContainer}>
           {currentSong && (
             <View
@@ -1862,19 +1760,55 @@ export default function ParticipantsScreen() {
             </View>
           )}
 
-          {currentActivity && (
+          {activitySeq.length > 0 && (
             <View
               style={{
                 flexDirection: "row",
-                gap: 4,
-                justifyContent: "flex-start",
+                gap: 5,
                 alignItems: "center",
+                flexWrap: "wrap",
               }}
             >
-              <Text style={{ color: C.text, fontSize: 15, opacity: 0.9 }}>
-                Location:
+              <Text
+                style={{
+                  color: C.text,
+                  fontSize: 15,
+                  opacity: 0.9,
+                }}
+              >
+                Activity Order:
               </Text>
-              <Text style={styles.sectionTitle}>{currentActivity}</Text>
+
+              {activitySeq.map((activity, idx) => (
+                <React.Fragment key={`${activity}_${idx}`}>
+                  {idx > 0 && (
+                    <FontAwesome5
+                      name="long-arrow-alt-right"
+                      size={15}
+                      color="#ffffffce"
+                    />
+                  )}
+
+                  <View
+                    style={{
+                      flexShrink: 1,
+                      maxWidth: 130,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: "#fff",
+                        fontSize: idx === playlistIdx ? 15 : 12,
+                        fontWeight: idx === playlistIdx ? "800" : "500",
+                        textAlign: "left",
+                        lineHeight: idx === playlistIdx ? 18 : 16,
+                      }}
+                    >
+                      {activity}
+                    </Text>
+                  </View>
+                </React.Fragment>
+              ))}
             </View>
           )}
         </View>
@@ -1970,7 +1904,7 @@ export default function ParticipantsScreen() {
         </View>
       )}
 
-      {/* Trajectory song */}
+      {/* Playlist song */}
       {currentSong && (
         <>
           {SHOW_LYRICS && !!currentSongLyrics && (
@@ -2085,7 +2019,7 @@ export default function ParticipantsScreen() {
               gap: 12,
               transform: [
                 {
-                  scale: !ratingDone ? nudgeAnim : 1,
+                  scale: nudgeAnim,
                 },
               ],
             }}
@@ -2229,14 +2163,6 @@ export default function ParticipantsScreen() {
           </View>
         </View>
       )}
-
-      {/* Emotion Modal */}
-      {/* <EmotionModal
-        visible={showEmotionModal}
-        heading="How do you feel right now?"
-        subheading={`Please update your emotion state and mood meter ${isPreFeedbackMessage ? "before starting the new playlist." : "after listening to this playlist."}`}
-        onClose={() => setShowEmotionModal(false)}
-      /> */}
 
       {/* Debug options modal */}
       <DebugOptionsModal

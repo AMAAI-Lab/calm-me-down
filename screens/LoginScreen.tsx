@@ -7,6 +7,7 @@ import {
 } from "@/constants/appConstants";
 import { RootStackParamList } from "@/navigation/RootNavigator";
 import { FontAwesome5 } from "@expo/vector-icons";
+import { useRoute } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "expo-router";
 import { useMemo, useState } from "react";
@@ -23,19 +24,26 @@ import EmotionInput from "../components/ui/emotion-input";
 import { useAuth } from "../context/AuthContext";
 
 export default function LoginScreen() {
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute();
 
-  const [form, setForm] = useState<UserProfile>({
-    nickName: "",
-    age: "",
-    email: "",
-    favoriteGenre: "",
-    favoriteBand: "",
-    profession: "",
-    about: "",
-  });
+  const isEdit =
+    ((route?.params as Record<string, string>)?.mode || "") === "edit";
+  const [form, setForm] = useState<UserProfile>(
+    isEdit
+      ? { ...((user || {}) as UserProfile) }
+      : {
+          nickName: "",
+          age: "",
+          email: "",
+          favoriteGenre: "",
+          favoriteBand: "",
+          profession: "",
+          about: "",
+        },
+  );
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<
     Partial<Record<keyof UserProfile, string>>
@@ -191,7 +199,10 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      const isParticipant = await login(form);
+      const isParticipant = await login(form, isEdit);
+      if (isEdit) {
+        return navigation.goBack();
+      }
 
       if (isParticipant) {
         navigation.replace("Participants");
@@ -324,7 +335,9 @@ export default function LoginScreen() {
         {loading ? (
           <ActivityIndicator color="#fff" size={30} />
         ) : (
-          <Text style={styles.buttonText}>Continue</Text>
+          <Text style={styles.buttonText}>
+            {isEdit ? "Save changes" : "Continue"}
+          </Text>
         )}
       </Pressable>
 
