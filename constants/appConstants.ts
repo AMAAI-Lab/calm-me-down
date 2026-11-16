@@ -1005,7 +1005,7 @@ export const PRE_GENERATED_PLAYLIST = {
 
 export const AI_TRAJECTORY_LENGTH = 4;
 
-export const ADD_PROFESSION_TO_PROMPT = false;
+export const ADD_PROFESSION_TO_PROMPT = true;
 export const ADD_ABOUT_TO_PROMPT = true;
 export const REPETITIVE_CHECK_IN_PROMPT = true;
 export const AUTO_GENERATE_NEWS_IN_PROMPT = true;

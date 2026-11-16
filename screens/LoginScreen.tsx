@@ -22,6 +22,9 @@ import {
 } from "react-native";
 import EmotionInput from "../components/ui/emotion-input";
 import { useAuth } from "../context/AuthContext";
+import { checkConnectivity } from "@/util/checkConnectivity";
+
+
 
 export default function LoginScreen() {
   const { login, user } = useAuth();
@@ -44,6 +47,14 @@ export default function LoginScreen() {
           about: "",
         },
   );
+  const [checking, setChecking] = useState(false);
+
+  const runNetworkCheck = async () => {
+    setChecking(true);
+    const result = await checkConnectivity();
+    setChecking(false);
+    Alert.alert("Network check", result);
+  };
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<
     Partial<Record<keyof UserProfile, string>>
@@ -241,6 +252,7 @@ export default function LoginScreen() {
     setTouched({});
     setErrors({});
   };
+  
 
   return (
     <ScrollView
@@ -364,9 +376,11 @@ export default function LoginScreen() {
           marginLeft: 10,
         }}
       >
-        <Text style={{ color: "#ece5e5", fontSize: 12 }}>
-          App version: {APP_VERSION}
-        </Text>
+        <Pressable onLongPress={runNetworkCheck} disabled={checking}>
+          <Text style={{ color: "#ece5e5", fontSize: 12 }}>
+            {checking ? "Checking network…" : `App version: ${APP_VERSION}`}
+          </Text>
+        </Pressable>
       </View>
     </ScrollView>
   );

@@ -47,6 +47,7 @@ export interface LyricAnimatorProps {
   autoScroll?: boolean;
 
   maxVisibleLines?: number;
+  onWordPress?: (val: number) => void;
 }
 
 interface AnimatedLineProps {
@@ -59,6 +60,7 @@ interface AnimatedLineProps {
   pastLineStyle?: TextStyle;
   highlightWords: boolean;
   hasAlignedWords: boolean;
+  onWordPress?: (val: number) => void;
 }
 
 function AnimatedLine({
@@ -71,6 +73,7 @@ function AnimatedLine({
   pastLineStyle,
   highlightWords,
   hasAlignedWords,
+  onWordPress,
 }: AnimatedLineProps) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(18)).current;
@@ -151,6 +154,7 @@ function AnimatedLine({
                       ? styles.pastWord
                       : undefined
                 }
+                onPress={() => onWordPress?.(word.startS)}
               >
                 {word.word}
               </Text>
@@ -230,7 +234,7 @@ const cleanAlignedWords = (alignedWords: AlignedWord[]): AlignedWord[] => {
     });
   }
 
-  return cleaned;
+  return cleaned.length > 0 ? cleaned : alignedWords;
 };
 
 export default function LyricAnimator({
@@ -246,6 +250,7 @@ export default function LyricAnimator({
   highlightWords = false,
   autoScroll = true,
   maxVisibleLines = 7,
+  onWordPress,
 }: LyricAnimatorProps) {
   const scrollRef = useRef<ScrollView>(null);
   const lineRefs = useRef<Record<number, View | null>>({});
@@ -494,6 +499,7 @@ export default function LyricAnimator({
               pastLineStyle={pastLineStyle || styles.pastLine}
               highlightWords={hasAlignedWords && highlightWords}
               hasAlignedWords={hasAlignedWords}
+              onWordPress={onWordPress}
             />
           </View>
         );

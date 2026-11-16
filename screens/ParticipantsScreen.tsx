@@ -1927,6 +1927,8 @@ export default function ParticipantsScreen() {
                 alignedWords={currentSong?.alignedWords || []}
                 autoScroll={true}
                 highlightWords={true}
+                onWordPress={handleSlidingComplete}
+
               />
             </View>
           )}
