@@ -37,6 +37,15 @@ export type UserProfile = {
 export interface LyricsResult {
   lyrics: string;
   musicStyle: string;
+  lyricsGenModel?: string;
+}
+
+export interface PromptContext {
+  playlistIdx: number; // which of the 4 playlists (0-based)
+  songIdx: number; // which song within the playlist (0-based)
+  trajectory: string[]; // emotion words for the whole playlist
+  previousLyrics: string[]; // lyrics of earlier songs in this playlist
+  previousStyles: string[]; // music style strings of earlier songs
 }
 
 export const APP_VERSION = 38;
@@ -14017,3 +14026,17 @@ export const EMOTION_PICKER_QUADRANTS: Record<
     bg: "#2c8c7c",
   },
 };
+
+export const DOWNLOAD_AUDIO_URL = true;
+export const ALLOW_HAPTIC_FEEDBACK = true;
+
+// Bump this whenever the lyric prompt or generation logic changes.
+// It is stored with every track so sessions can be grouped by stimulus version.
+export const LYRICS_PROMPT_VERSION = "2026-11-17-v1";
+
+export const MAX_NEWS_HEADLINES = 3;
+
+export const CLAUDE_LYRICS_MODEL: string = "claude-opus-4-6";
+// export const CLAUDE_LYRICS_MODEL: string = "claude-opus-5-5"
+
+export const SHOW_UPLOAD_HEALTH_BTN = true;

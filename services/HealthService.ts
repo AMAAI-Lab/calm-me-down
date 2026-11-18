@@ -53,6 +53,10 @@ const permissions: HealthKitPermissions = {
 export type HealthData = {
   heartRate: number | null;
   heartRateSamples: HeartRateSample[];
+  /** Number of HR samples found in the query window (0 = none). */
+  heartRateSampleCount?: number;
+  /** ISO timestamp of the newest HR sample used, or null. */
+  heartRateLatestAt?: string | null;
   steps: number | null;
   hrv: number | null;
   arousal: number | null;
@@ -222,18 +226,19 @@ export async function fetchAppleHealthData(
   const hrPromise = new Promise<{
     avg: number | null;
     samples: HeartRateSample[];
+    count: number;
+    latestAt: string | null;
   }>((resolve) => {
     AppleHealthKit.getHeartRateSamples(
       { startDate, endDate },
       (err: string, results: HealthValue[]) => {
         if (err || !results.length) {
           console.error("HR NULL");
-          resolve({ avg: null, samples: [] });
+          resolve({ avg: null, samples: [], count: 0, latestAt: null });
         } else {
           console.log(
             `HR: ${results.length} samples in last ${windowMinutes} min`,
             // log all samples
-
           );
           results.forEach((r, i) => {
             console.log(` [${i}] ${r.value} bpm at ${r.startDate}`);
@@ -241,14 +246,23 @@ export async function fetchAppleHealthData(
 
           const avg =
             results.reduce((sum, r) => sum + r.value, 0) / results.length;
-          const samples = !HRV_APP_VERSION
-            ? []
-            : results.map((r) => ({
-                value: r.value,
-                timestamp: r.startDate,
-              }));
+          const samples = results.map((r) => ({
+            value: r.value,
+            timestamp: r.startDate,
+          }));
 
-          resolve({ avg: Math.round(avg), samples });
+          // Newest sample, whatever order HealthKit returned them in
+          const latestAt = results.reduce(
+            (latest, r) => (r.startDate > latest ? r.startDate : latest),
+            results[0].startDate,
+          );
+
+          resolve({
+            avg: Math.round(avg),
+            samples,
+            count: results.length,
+            latestAt,
+          });
         }
       },
     );
@@ -331,6 +345,8 @@ export async function fetchAppleHealthData(
   return {
     heartRate: hrResult.avg,
     heartRateSamples: hrResult.samples,
+    heartRateSampleCount: hrResult.count,
+    heartRateLatestAt: hrResult.latestAt,
     steps,
     hrv,
     arousal,

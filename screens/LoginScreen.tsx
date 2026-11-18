@@ -6,6 +6,7 @@ import {
   UserProfile,
 } from "@/constants/appConstants";
 import { RootStackParamList } from "@/navigation/RootNavigator";
+import { checkConnectivity } from "@/util/checkConnectivity";
 import { FontAwesome5 } from "@expo/vector-icons";
 import { useRoute } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -22,9 +23,6 @@ import {
 } from "react-native";
 import EmotionInput from "../components/ui/emotion-input";
 import { useAuth } from "../context/AuthContext";
-import { checkConnectivity } from "@/util/checkConnectivity";
-
-
 
 export default function LoginScreen() {
   const { login, user } = useAuth();
@@ -109,7 +107,13 @@ export default function LoginScreen() {
       required: false,
     },
     about: {
-      required: false,
+      required: true,
+      validate: (v) => {
+        if (v.trim().length < 1) {
+          return "Please tell us something about yourself.";
+        }
+        return undefined;
+      },
     },
     favoriteGenre: {
       required: true,
@@ -252,7 +256,6 @@ export default function LoginScreen() {
     setTouched({});
     setErrors({});
   };
-  
 
   return (
     <ScrollView
@@ -273,7 +276,7 @@ export default function LoginScreen() {
         icon={<FontAwesome5 name="smile-beam" size={16} color="#fff" />}
         value={form?.nickName || ""}
         onChange={(t) => handleChange("nickName", t)}
-        hint="Enter a name or nickname — this is how your lyrics will address you."
+        // hint="Enter a name or nickname — this is how your lyrics will address you."
       />
 
       <EmotionDropdown
@@ -297,7 +300,7 @@ export default function LoginScreen() {
       />
       <EmotionInput
         label="Participant ID / Email"
-        placeholder="e.g. P1 / alex@gmail.com"
+        placeholder="e.g. P1, P101 / alex@gmail.com"
         icon={<FontAwesome5 name="id-badge" size={16} color="#fff" />}
         value={form.email}
         onChange={(t) => handleChange("email", t)}
@@ -305,11 +308,12 @@ export default function LoginScreen() {
       />
 
       <EmotionInput
-        label="About you (optional)"
+        label="About you"
         placeholder="e.g. I love late night drives, rainy days and indie films..."
         icon={<FontAwesome5 name="feather-alt" size={16} color="#fff" />}
         value={form?.about || ""}
         onChange={(t) => handleChange("about", t)}
+        error={touched.about ? errors.about : undefined}
         hint="A line about yourself helps personalize your lyrics."
         numberOfLines={5}
       />

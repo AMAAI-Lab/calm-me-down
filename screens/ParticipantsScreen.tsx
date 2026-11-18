@@ -14,13 +14,16 @@ import {
   AUTO_GENERATE_NEWS_IN_PROMPT,
   CONTINUOUS_PLAYBACK_MS,
   DEBUG_MODE,
-  DEFAULT_HEALTH_DATA,
+  DOWNLOAD_AUDIO_URL,
   HealthProvider,
   LISTEN_BEFORE_GENERATE_MS,
+  LYRICS_PROMPT_VERSION,
   NON_AI_PLAYLIST_TYPE,
+  PromptContext,
   REPETITIVE_CHECK_IN_PROMPT,
   SHOW_LYRICS,
   SHOW_NEWS,
+  SHOW_UPLOAD_HEALTH_BTN,
   SHOW_WEATHER_INFO,
 } from "@/constants/appConstants";
 import { useAuth } from "@/context/AuthContext";
@@ -29,6 +32,7 @@ import {
   addTrackToSession as addTrackToTrajectory,
   createMusicSession,
   createMusicTrajectory,
+  updateMusicSession,
   updateMusicTrajectory,
   updateTrackFields,
 } from "@/services/DbService";
@@ -47,7 +51,6 @@ import {
   FeedbackSubmittedStatus,
   getFeedbackSubmitted,
   getPlaylistFeedback,
-  getRandomGenres,
   getSessionId,
   getTrackId,
   getTrajectoryId,
@@ -67,10 +70,17 @@ import {
 import {
   fetchUniqueNewsData,
   fetchWeatherData,
+  filterHeadlines,
   NewsData,
   WeatherData,
 } from "@/services/WeatherNewsService";
-import { capitalize, formatTime } from "@/util/commonUtils";
+import {
+  capitalize,
+  formatTime,
+  getTimeOfDay,
+  parseGenres,
+  shuffle,
+} from "@/util/commonUtils";
 import { FontAwesome5 } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import { useFocusEffect } from "@react-navigation/native";
@@ -94,9 +104,11 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StyleProp,
   StyleSheet,
   Text,
   View,
+  ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -180,6 +192,7 @@ const SEQUENCES: Record<TargetEmotion, PlaylistId[][]> = {
 };
 
 const DEFAULT_DURATION = 120;
+const FINAL_URL_PREFIX = "tempfile.aiquickdraw";
 
 function pickSequence(
   target: TargetEmotion,
@@ -213,7 +226,15 @@ export default function ParticipantsScreen() {
   const online = useIsOnline();
   const [nextSongFailed, setNextSongFailed] = useState(false);
   const pendingRef = useRef<
-    Record<number, { prompt: string; lyrics: string; musicStyle: string }>
+    Record<
+      number,
+      {
+        prompt: string;
+        lyrics: string;
+        musicStyle: string;
+        lyricsGenModel: string;
+      }
+    >
   >({});
 
   const [phase, setPhase] = useState<Phase>("setup");
@@ -275,6 +296,10 @@ export default function ParticipantsScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const lyricsRef = useRef<View>(null);
 
+  const playlistLyricsRef = useRef<string[]>([]);
+  const playlistStylesRef = useRef<string[]>([]);
+  const genreOrderRef = useRef<string[]>([]);
+
   const startHintMsg = useMemo(() => {
     if (!startEmotion && !targetEmotion) {
       return "Select your emotions to continue";
@@ -318,7 +343,11 @@ export default function ParticipantsScreen() {
   ]);
 
   const activitySeq = useMemo(() => {
-    const randomIndex = [0, 1, 2, 3].sort(() => Math.random() - 0.5)[0];
+    let randomIndex = [0, 1, 2, 3].sort(() => Math.random() - 0.5)[0];
+    if (DEBUG_MODE) {
+      randomIndex = 1;
+    }
+    // randomIndex = 0;
     const randomSeq = SEQUENCES.relaxed[randomIndex || 0];
 
     const actSeq = randomSeq.map((id) => PLAYLIST_DEFS[id].activity);
@@ -375,6 +404,9 @@ export default function ParticipantsScreen() {
     if (showMoodMeterButton && !isMoodMeterDisabled) return "";
     else if (!startEmotion) return "start";
     else if (!targetEmotion) return "target";
+    else if (showNextPlaylistBtn && !nextPlaylistBtnDisabled) {
+      return "nextPlaylist";
+    }
     return "";
   }, [showMoodMeterButton, isMoodMeterDisabled, startEmotion, targetEmotion]);
 
@@ -437,10 +469,33 @@ export default function ParticipantsScreen() {
     }
   };
 
+  // One lead genre per song, cycling through all of the participant's
+  // favourite genres so every one of them is heard within the playlist.
+  const leadGenreFor = (songIdx: number): string => {
+    const order = genreOrderRef.current;
+    if (!order.length) return user?.favoriteGenre || "";
+    return order[songIdx % order.length];
+  };
+
+  const trackExtras = (
+    h: HealthData | null,
+    tempoRange: number[] | null,
+    leadGenre: string,
+    plIdx: number,
+  ) => ({
+    promptVersion: LYRICS_PROMPT_VERSION,
+    hrSampleCount: h?.heartRateSampleCount ?? 0,
+    hrLatestSampleAt: h?.heartRateLatestAt ?? "N/A",
+    tempoRange: tempoRange ?? "N/A",
+    leadGenre: leadGenre || "N/A",
+    activity: activitySeq?.[plIdx] || "N/A",
+  });
+
   const buildLyricsPrompt = async (
     mood: string,
     healthData: HealthData,
     favGenre: string,
+    ctx: PromptContext,
   ) => {
     const isHrValid = !!healthData.heartRate;
     const isStepsValid = !!healthData.steps;
@@ -448,11 +503,31 @@ export default function ParticipantsScreen() {
     const { weather, news } = (await fetchWeatherAndNews()) || {};
     const addProfession = ADD_PROFESSION_TO_PROMPT && !!user?.profession;
     const activityContext =
-      activitySeq?.[playlistIdx] === "Walking Outside" ? "Walking" : "Sitting";
+      activitySeq?.[ctx.playlistIdx] === "Walking Outside"
+        ? "Walking"
+        : "Sitting";
     const about = ADD_ABOUT_TO_PROMPT && user?.about?.trim();
-    const newsHeadlines = (news?.headline || [])
-      .map((h, i) => `  ${i + 1}. "${h}"`)
-      .join("\n");
+    const newsHeadlines =
+      filterHeadlines(news?.headline || [])
+        .map((h, i) => `  ${i + 1}. "${h}"`)
+        .join("\n") || "  (none available)";
+
+    const sitting = activityContext === "Sitting";
+    const totalSongs = ctx.trajectory.length || AI_TRAJECTORY_LENGTH;
+    const fromEmotion = ctx.trajectory[0] || mood;
+    const toEmotion = ctx.trajectory[ctx.trajectory.length - 1] || mood;
+    const isFirstSong = ctx.songIdx === 0;
+    const isLastSong = ctx.songIdx >= totalSongs - 1;
+    const leadGenre = favGenre || user?.favoriteGenre || "";
+    const otherGenres = genreOrderRef.current
+      .filter((g) => g !== leadGenre)
+      .join(", ");
+    const previousSongs = ctx.previousLyrics
+      .map((l, i) => (l ? `--- Song ${i + 1} ---\n${l}` : ""))
+      .filter(Boolean)
+      .join("\n\n");
+    const previousStyles = ctx.previousStyles.filter(Boolean).join(" | ");
+    const timeOfDay = getTimeOfDay();
 
     const preventRepetition = REPETITIVE_CHECK_IN_PROMPT;
     const repetitionRules = `
@@ -466,6 +541,7 @@ export default function ParticipantsScreen() {
       - Profession experiences or routines
       - Activity/movement state
       - Weather/environment
+      - Time of day
       - Location atmosphere
       - Mood
       - Music style influence
@@ -525,7 +601,7 @@ export default function ParticipantsScreen() {
     `;
     const originalityRules = `
       6. ORIGINALITY and LYRIC VARIATION RULES:
-      - Avoid repeating phrases, metaphors, sentence patterns, and imagery from previous songs.
+      - Avoid repeating phrases, metaphors, sentence patterns, and imagery from the previous songs listed above.
       - Do not default to common AI lyric imagery.
       - Prefer specific and unexpected details over generic emotional descriptions.
       - Create a new setting, perspective, and emotional angle for each song.
@@ -540,34 +616,69 @@ export default function ParticipantsScreen() {
     const prompt = `
       You are a creative songwriter. Generate original song lyrics personalized to the following inputs:
 
-      USER
+      USER (background)
       - Name: ${user?.nickName || "Spark"}
       - Age: ${user?.age}
       ${addProfession ? `- Profession: ${user.profession}` : ""}
       ${about ? `- About: ${about}` : ""}
+      The name may appear at most once in the whole playlist; if a previous song below already uses it, do not use it again.
+      Never state the age as a number. Let it inform perspective only.
+
+      PLAYLIST POSITION
+      - This is song ${ctx.songIdx + 1} of ${totalSongs} in one playlist.
+      - The playlist moves the listener gradually from "${fromEmotion}" to "${toEmotion}".
+      - This song's emotional step: ${mood}
+      - ${
+        isFirstSong
+          ? "This is the first song: meet the listener where they are now."
+          : isLastSong
+            ? "This is the final song: it should fully arrive at the target feeling."
+            : "It must feel one clear step further along that path than the previous song, in the lyrics and in the music style string."
+      }
 
       MUSIC STYLE
-      - Genre preference: ${favGenre || user?.favoriteGenre}
+      - Lead genre for this song: ${leadGenre}
+      ${otherGenres ? `- Listener's other favourite genres (used by other songs; light flavour at most): ${otherGenres}` : ""}
       - Stylistic influence (do NOT imitate or quote): ${user?.favoriteBand}
       - mood: ${mood}
 
       PHYSICAL CONTEXT
       ${isHrValid ? `- Heart rate in last 5 min: ${healthData.heartRate} bpm` : ""}
       ${isStepsValid ? `- Movement in last 5 min: ${healthData.steps} steps` : ""}
-      - Current or upcoming activity: ${activityContext}
+      - Activity right now (fixed): ${sitting ? "Seated indoors" : "Walking outdoors"}
+      ${sitting ? "- The listener is sitting still. Do not depict walking, running or travelling." : "- The listener is walking. Do not depict sitting or lying still."}
 
       ENVIRONMENT
       - Location: ${weather?.city || "Unknown"}
-      - Weather: ${weather?.temperature ? `${weather.temperature}°C, ${weather.description}` : "Unknown"}
+      - Weather: ${weather?.temperature ? `${weather.temperature}°C, ${weather.description}` : "Unknown"} (a fact for context: if you use it, describe it in your own words and never quote this phrase)
       - Optional news inspiration (pick at most one if emotionally relevant, ignore the rest):
       ${newsHeadlines}
+
+      TIME OF DAY
+      - Part of the day: ${timeOfDay.label}
+      - Natural feel: ${timeOfDay.feel}
+      - Use this as quiet atmosphere, not as a topic. Never mention clock times or numbers.
+      - Prefer to imply it through light quality, pace, energy, routines and small sensory details.
+      - You may name the part of the day at most once in the song, or not at all.
+      - If a previous song above already leaned on time-of-day imagery, use a different angle.
+
+      PREVIOUS SONGS IN THIS PLAYLIST
+      ${
+        previousSongs
+          ? `Do not reuse their opening lines, settings, key images, rhymes or phrases. Choose a different personalization focus.
+
+      ${previousSongs}
+
+      Previous music style strings: ${previousStyles || "n/a"}`
+          : "None. This is the first song."
+      }
 
       ${preventRepetition ? `${repetitionRules}` : ""}
 
       TASK:
       Write cohesive song lyrics.
       1. Structure: Verse 1, Pre-Chorus, Chorus, Verse 2, Pre-Chorus, Outro.
-      2. Line count (STRICT): Verse = 4 lines, Pre-Chorus = 2 lines, Chorus = 4 lines, Outro = 3 lines. Total: 23 lines.
+      2. Line count (STRICT): Verse = 4 lines, Pre-Chorus = 2 lines, Chorus = 4 lines, Outro = 3 lines. Total: 19 lines.
       3. Line length: Each line must be 6–10 words. No long run-on lines.
       4. Tone: ${mood} and emotionally grounded.
       ${
@@ -597,7 +708,8 @@ export default function ParticipantsScreen() {
       ${addProfession ? `10` : `9`}. Before writing the lyrics, internally consider how the song should feel in terms of emotion, genre, and tempo/beat (e.g., slow emotional, mid-tempo groovy, fast energetic), and reflect that naturally in rhythm, wording, and flow of the lyrics. Do NOT explicitly mention tempo or BPM in the lyrics.
 
       MUSIC STYLE STRING:
-      Based on the mood, heart rate, steps and activity, generate a short Suno-style music style descriptor (max 12 words). It should describe genre, tempo feel, and sonic texture.
+      Based on the mood, the lead genre, heart rate, steps, activity and time of day, generate a short Suno-style music style descriptor (max 12 words). It should describe genre, tempo feel, and sonic texture.
+      It must be built on the lead genre for this song.${previousStyles ? ` It must sound clearly different from the previous style strings above while moving toward "${toEmotion}".` : ""}
       Example: Dreamy indie pop, slow tempo, warm acoustic guitar, soft vocals
 
       OUTPUT FORMAT (STRICT):
@@ -655,30 +767,51 @@ export default function ParticipantsScreen() {
     await clearStates();
 
     setPlaylistType("AI_Trajectory");
-    const currHealthData =
-      healthData && (healthData?.heartRate || healthData?.steps)
-        ? healthData
-        : DEFAULT_HEALTH_DATA;
+    // New playlist: forget the previous playlist's songs, re-draw genre order
+    playlistLyricsRef.current = [];
+    playlistStylesRef.current = [];
+    genreOrderRef.current = shuffle(parseGenres(user?.favoriteGenre));
 
-    const favGenre = await getRandomGenres(user?.favoriteGenre || "");
+    // Fresh reading for the first song.
+    const currHealthData = await fetchAppleHealthData(5);
+
+    // Trajectory is computed first so the prompt knows where the playlist goes
+    const currTrajectory = generateTrajectory(givenTargetEmotion);
+
+    const favGenre = leadGenreFor(0);
     const prompt = await buildLyricsPrompt(
       startEmotion || "Relaxed",
       currHealthData,
       favGenre,
+      {
+        playlistIdx: nextPlaylistIdx, // passed in: playlistIdx state is stale here
+        songIdx: 0,
+        trajectory: currTrajectory,
+        previousLyrics: [],
+        previousStyles: [],
+      },
     );
 
     // Generate song lyrics
     let currentLyrics = "";
     let suggestedMusicStyle = "";
+    let lyricsGenModel = "";
     try {
-      const { lyrics, musicStyle = "" } = (await generatelyrics(prompt)) || {};
+      const {
+        lyrics,
+        musicStyle = "",
+        lyricsGenModel: lgm = "",
+      } = (await generatelyrics(prompt)) || {};
       if (lyrics) {
         currentLyrics = lyrics;
         setLyricsQueue([lyrics]);
+        playlistLyricsRef.current[0] = lyrics;
+        playlistStylesRef.current[0] = musicStyle;
       } else {
         console.warn("Lyrics Generation Failed!");
       }
       suggestedMusicStyle = musicStyle;
+      lyricsGenModel = lgm;
     } catch (error: any) {
       console.error(
         "An error occurred while generating lyrics:",
@@ -713,6 +846,13 @@ export default function ParticipantsScreen() {
         setSongQueue([generatedSong]);
         generatedStreamUrl = generatedSong?.audioUrl;
         sunoOrgPayload = generatedSong?.songProviderPayload || {};
+
+        if (
+          !DOWNLOAD_AUDIO_URL &&
+          generatedStreamUrl?.includes(FINAL_URL_PREFIX)
+        ) {
+          setFinalUrlsReady((prev) => ({ ...prev, [index]: true }));
+        }
       } else {
         console.warn("Song Generation Failed, Could not generate song audio.");
       }
@@ -723,7 +863,6 @@ export default function ParticipantsScreen() {
       );
     }
 
-    const currTrajectory = generateTrajectory(givenTargetEmotion);
     setEmotionTrajectory(currTrajectory);
     try {
       const feedbackData = await getPlaylistFeedback();
@@ -751,11 +890,13 @@ export default function ParticipantsScreen() {
           streamUrl: generatedStreamUrl || songQueue[0]?.audioUrl || "",
           lyrics: currentLyrics,
           lyricsPrompt: prompt,
+          lyricsGenModel: lyricsGenModel || "N/A",
           sunoOrgPayload: { ...sunoOrgPayload },
-          heartRate: healthData?.heartRate || "N/A",
-          steps: healthData?.steps || "N/A",
+          heartRate: currHealthData?.heartRate || "N/A",
+          steps: currHealthData?.steps || "N/A",
           suggestedAiMusicStyle: suggestedMusicStyle || "",
           songNumber: 1,
+          ...trackExtras(currHealthData, tempoRange, favGenre, nextPlaylistIdx),
         },
         true,
         newTrajectoryID,
@@ -795,11 +936,15 @@ export default function ParticipantsScreen() {
     if (!track) {
       return;
     }
-    setLyricsQueue([track?.lyrics || ""]);
 
+    setLyricsQueue([track?.lyrics || ""]);
     setSongQueue([track]);
+    if (!DOWNLOAD_AUDIO_URL) {
+      setFinalUrlsReady((prev) => ({ ...prev, [0]: true }));
+    }
 
     try {
+      const savedHealthData = await fetchAppleHealthData(5);
       const feedbackData = await getPlaylistFeedback();
       const sessionId = await getSessionId();
       const newTrajectoryID = await createMusicTrajectory(
@@ -821,9 +966,10 @@ export default function ParticipantsScreen() {
         {
           mood: startEmotion || currTrajectory[0] || "N/A",
           streamUrl: track.audioUrl || "",
-          heartRate: healthData?.heartRate || "N/A",
-          steps: healthData?.steps || "N/A",
+          heartRate: savedHealthData?.heartRate || "N/A",
+          steps: savedHealthData?.steps || "N/A",
           songNumber: 1,
+          ...trackExtras(savedHealthData, null, "", nextPlaylistIdx),
         },
         true,
         newTrajectoryID,
@@ -854,12 +1000,15 @@ export default function ParticipantsScreen() {
         setSequence(seq);
         console.log("Picked sequence: ", seq);
       }
+      const playlistSequence = seq.map((id) => PLAYLIST_DEFS[id].playlistType);
 
       const newSessionID = await createMusicSession(
         user?.email!,
         {
           userDetails: { ...user },
           hrvUsed: false,
+          activityOrder: activitySeq,
+          playlistSequence,
         },
         true,
       );
@@ -975,7 +1124,7 @@ export default function ParticipantsScreen() {
     console.log("HR for next song: ", latestHealthData.heartRate);
     console.log("Steps for next song: ", latestHealthData.steps);
 
-    const favGenre = await getRandomGenres(user?.favoriteGenre || "");
+    const favGenre = leadGenreFor(nextSongIdx);
 
     const fail = () => {
       setGenerationLockedForIndex(null);
@@ -990,18 +1139,33 @@ export default function ParticipantsScreen() {
         currentMood,
         latestHealthData,
         favGenre,
+        {
+          playlistIdx,
+          songIdx: nextSongIdx,
+          trajectory: emotionTrajectory,
+          previousLyrics: playlistLyricsRef.current.slice(0, nextSongIdx),
+          previousStyles: playlistStylesRef.current.slice(0, nextSongIdx),
+        },
       );
       try {
-        const { lyrics, musicStyle = "" } = (await withRetry(() =>
-          generatelyrics(prompt),
-        )) || { lyrics: "", musicStyle: "" };
+        const {
+          lyrics,
+          musicStyle = "",
+          lyricsGenModel = "",
+        } = (await withRetry(() => generatelyrics(prompt))) || {
+          lyrics: "",
+          musicStyle: "",
+        };
         if (!lyrics) throw new Error("empty lyrics");
 
         cached = pendingRef.current[nextSongIdx] = {
           prompt,
           lyrics,
           musicStyle,
+          lyricsGenModel,
         };
+        playlistLyricsRef.current[nextSongIdx] = lyrics;
+        playlistStylesRef.current[nextSongIdx] = musicStyle;
         setLyricsQueue((prev) => {
           const n = [...prev];
           n[nextSongIdx] = lyrics;
@@ -1049,6 +1213,10 @@ export default function ParticipantsScreen() {
     });
     generatedStreamUrl = generatedSong?.audioUrl;
     sunoOrgPayload = generatedSong?.songProviderPayload || {};
+    if (!DOWNLOAD_AUDIO_URL && generatedStreamUrl?.includes(FINAL_URL_PREFIX)) {
+      setFinalUrlsReady((prev) => ({ ...prev, [nextSongIdx]: true }));
+    }
+
     delete pendingRef.current[nextSongIdx];
     setNextSongFailed(false);
 
@@ -1069,7 +1237,9 @@ export default function ParticipantsScreen() {
           heartRate: latestHealthData?.heartRate || "N/A",
           steps: latestHealthData?.steps || "N/A",
           suggestedAiMusicStyle: cached.musicStyle || "",
+          lyricsGenModel: cached.lyricsGenModel || "N/A",
           songNumber: nextSongIdx + 1,
+          ...trackExtras(latestHealthData, tempoRange, favGenre, playlistIdx),
         },
         true,
         trajectoryID,
@@ -1111,8 +1281,12 @@ export default function ParticipantsScreen() {
       setNextSongLoading(false);
       return;
     }
+
     setLyricsQueue((prev) => [...prev, track?.lyrics || ""]);
     setSongQueue((prev) => [...prev, track]);
+    if (!DOWNLOAD_AUDIO_URL) {
+      setFinalUrlsReady((prev) => ({ ...prev, [nextSongIdx]: true }));
+    }
 
     try {
       const currentMood = emotionTrajectory?.[nextSongIdx] || "Relaxed";
@@ -1130,6 +1304,7 @@ export default function ParticipantsScreen() {
           heartRate: latestHealthData?.heartRate || "N/A",
           steps: latestHealthData?.steps || "N/A",
           songNumber: nextSongIdx + 1,
+          ...trackExtras(latestHealthData, null, "", playlistIdx),
         },
         true,
         trajectoryID,
@@ -1246,6 +1421,20 @@ export default function ParticipantsScreen() {
         feedbackAfter: { ...feedbackData, emotionState: emotion },
       });
     }
+  };
+
+  const uploadSessionHealthData = async () => {
+    const recentHealthDataBlk = await fetchAppleHealthData(90);
+
+    const sessionId = await getSessionId();
+    await updateMusicSession(
+      user?.email!,
+      sessionId,
+      {
+        healthData: recentHealthDataBlk,
+      },
+      true,
+    );
   };
 
   // Fetch news and weather info
@@ -1631,19 +1820,7 @@ export default function ParticipantsScreen() {
       >
         <View style={{ flexDirection: "row", gap: 15 }}>
           {!isEmotionLocked && indicatorIcon === "start" && (
-            <Animated.View
-              style={{
-                opacity: indicatorAnim,
-                marginTop: 5,
-                transform: [
-                  {
-                    scale: indicatorAnim,
-                  },
-                ],
-              }}
-            >
-              <FontAwesome5 name="hand-point-right" size={22} color={"#fff"} />
-            </Animated.View>
+            <AnimatedIcon anim={indicatorAnim} />
           )}
 
           <View style={{ width: "100%" }}>
@@ -1686,19 +1863,7 @@ export default function ParticipantsScreen() {
       <View style={styles.section}>
         <View style={{ flexDirection: "row", gap: 15 }}>
           {!isLocked && indicatorIcon === "target" && (
-            <Animated.View
-              style={{
-                opacity: indicatorAnim,
-                marginTop: 5,
-                transform: [
-                  {
-                    scale: indicatorAnim,
-                  },
-                ],
-              }}
-            >
-              <FontAwesome5 name="hand-point-right" size={22} color={"#fff"} />
-            </Animated.View>
+            <AnimatedIcon anim={indicatorAnim} />
           )}
 
           <View style={{ width: "100%" }}>
@@ -1928,7 +2093,6 @@ export default function ParticipantsScreen() {
                 autoScroll={true}
                 highlightWords={true}
                 onWordPress={handleSlidingComplete}
-
               />
             </View>
           )}
@@ -2101,8 +2265,32 @@ export default function ParticipantsScreen() {
       {/* Next Playlist button */}
       {showNextPlaylistBtn && (
         <View style={[styles.section, { marginTop: 60 }]}>
-          <View style={styles.sectionHead}>
-            <Text style={styles.sectionTitle}>{nextPlaylistMsg}</Text>
+          <View
+            style={{
+              flexDirection: "row",
+              gap: 15,
+              alignItems: "flex-end",
+            }}
+          >
+            {indicatorIcon === "nextPlaylist" && (
+              <AnimatedIcon
+                anim={indicatorAnim}
+                size={26}
+                style={{
+                  marginBottom: 10,
+                  marginLeft: 10,
+                  transform: [{ scale: indicatorAnim }, { rotate: "90deg" }],
+                }}
+              />
+            )}
+
+            <Text
+              style={[styles.sectionTitle, { marginBottom: 15 }]}
+              numberOfLines={3}
+              ellipsizeMode="tail"
+            >
+              {nextPlaylistMsg}
+            </Text>
           </View>
 
           <Pressable
@@ -2180,6 +2368,15 @@ export default function ParticipantsScreen() {
           App version: {APP_VERSION}
         </Text>
       </View>
+
+      {/* Upload Health data Button */}
+      {(allPlaylistsCompleted || SHOW_UPLOAD_HEALTH_BTN) && (
+        <View style={[styles.section, { marginTop: 0 }]}>
+          <Pressable onPress={uploadSessionHealthData} style={styles.startBtn}>
+            <Text style={styles.startBtnText}>Upload session Health data</Text>
+          </Pressable>
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -2289,3 +2486,26 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
 });
+
+const AnimatedIcon = ({
+  anim,
+  size = 22,
+  style: extraStyles,
+}: {
+  anim: Animated.Value;
+  size?: number;
+  style?: StyleProp<ViewStyle>;
+}) => (
+  <Animated.View
+    style={[
+      {
+        opacity: anim,
+        marginTop: 5,
+        transform: [{ scale: anim }],
+      },
+      extraStyles,
+    ]}
+  >
+    <FontAwesome5 name="hand-point-right" size={size} color="#fff" />
+  </Animated.View>
+);

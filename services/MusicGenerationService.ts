@@ -1,7 +1,9 @@
 import {
+  CLAUDE_LYRICS_MODEL,
   CURRENT_LYRICS_PROVIDER,
   CURRENT_SONG_PROVIDER,
   DEBUG_MODE,
+  DOWNLOAD_AUDIO_URL,
   JAMENDO_PLAYLIST,
   LYRICS_PROVIDERS,
   LyricsProviderType,
@@ -117,7 +119,10 @@ async function generateWithProvider(
   }
 }
 
-function extractLyrics(text: string): LyricsResult | null {
+function extractLyrics(
+  text: string,
+  lyricsGenModel: string,
+): LyricsResult | null {
   try {
     const cleaned = (text || "").replace(/```json\n/, "").replace(/\n```$/, "");
     const parsed = JSON.parse(cleaned);
@@ -134,7 +139,7 @@ function extractLyrics(text: string): LyricsResult | null {
     ].join("\n\n");
     const musicStyle = parsed?.musicStyle || "";
 
-    return { lyrics, musicStyle };
+    return { lyrics, musicStyle, lyricsGenModel };
   } catch (error: any) {
     console.error(
       `Failed to extract lyrics from response by [${CURRENT_LYRICS_PROVIDER}]: `,
@@ -177,7 +182,10 @@ async function generateWithPerplexity(
       );
     }
 
-    return extractLyrics(data.choices[0]?.message?.content || "");
+    return extractLyrics(
+      data.choices[0]?.message?.content || "",
+      "perplexity-sonar-pro",
+    );
   } catch (error: any) {
     console.error(
       "An error occurred while generating song lyrics with PERPLEXITY:",
@@ -198,6 +206,10 @@ async function generateWithClaude(
     return null;
   }
 
+  if (CLAUDE_LYRICS_MODEL === "claude-opus-5-5") {
+    return generateWithClaudeOpus5_5(prompt);
+  }
+
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -205,12 +217,16 @@ async function generateWithClaude(
         "Content-Type": "application/json",
         "x-api-key": `${CLAUDE_API_KEY}`,
         "anthropic-version": "2023-06-01",
+
+        // "anthropic-dangerous-direct-browser-access": "true",
       },
       body: JSON.stringify({
         messages: [{ role: "user", content: prompt }],
         // max_tokens: 1024,
         max_tokens: 512,
-        model: "claude-opus-4-6",
+        // model: "claude-opus-4-6",
+        // model: "claude-opus-5-5",
+        model: CLAUDE_LYRICS_MODEL,
       }),
     });
 
@@ -221,10 +237,77 @@ async function generateWithClaude(
       );
     }
 
-    return extractLyrics(data?.content[0]?.text || "");
+    return extractLyrics(data?.content[0]?.text || "", CLAUDE_LYRICS_MODEL);
   } catch (error: any) {
     console.error(
-      "An error occurred while generating song lyrics with CLUADE:",
+      "An error occurred while generating song lyrics with CLAUDE:",
+      error?.message,
+    );
+    return null;
+  }
+}
+
+async function generateWithClaudeOpus5_5(
+  prompt: string,
+  maxTokens = 1024,
+  isRetry = false,
+): Promise<LyricsResult | null> {
+  if (!CLAUDE_API_KEY) {
+    Alert.alert(
+      "API Key Missing",
+      "Please set the CLAUDE API key to generate lyrics.",
+    );
+    return null;
+  }
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": `${CLAUDE_API_KEY}`,
+        "anthropic-version": "2023-06-01",
+
+        // "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: CLAUDE_LYRICS_MODEL,
+        max_tokens: maxTokens,
+        output_config: { effort: "low" },
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(
+        data.error?.message || "CLAUDE failed to generate lyrics.",
+      );
+    }
+
+    // Output was cut off: retry once with a larger budget instead of parsing partial JSON
+    if (data.stop_reason === "max_tokens") {
+      if (!isRetry) {
+        console.warn("Claude hit max_tokens, retrying with a higher limit");
+        return generateWithClaudeOpus5_5(prompt, maxTokens * 4, true);
+      }
+      throw new Error("Claude response was truncated (max_tokens).");
+    }
+
+    // Find the text block by type; content[0] may be a thinking block
+    const text = (data.content ?? [])
+      .filter((block: any) => block.type === "text")
+      .map((block: any) => block.text)
+      .join("");
+
+    if (!text) {
+      throw new Error("Claude returned no text content.");
+    }
+
+    return extractLyrics(text, CLAUDE_LYRICS_MODEL);
+  } catch (error: any) {
+    console.error(
+      "An error occurred while generating song lyrics with CLAUDE:",
       error?.message,
     );
     return null;
@@ -262,7 +345,10 @@ async function generateWithOpenAi(
       );
     }
 
-    return extractLyrics(data?.output[0]?.content[0]?.text || "");
+    return extractLyrics(
+      data?.output[0]?.content[0]?.text || "",
+      "openAI-gpt-5.2",
+    );
   } catch (error: any) {
     console.error(
       "An error occurred while generating song lyrics with OPEN_AI:",
@@ -301,6 +387,7 @@ async function generateWithGrok(prompt: string): Promise<LyricsResult | null> {
 
     return extractLyrics(
       (data?.output[0]?.content || data?.output[1]?.content)[0]?.text || "",
+      "grok-4-0709",
     );
   } catch (error: any) {
     console.error(
@@ -405,7 +492,7 @@ async function generateWithGemini(
       );
     }
 
-    return extractLyrics(sanitizeJsonControlChars(cleaned));
+    return extractLyrics(sanitizeJsonControlChars(cleaned), "gemini-2.5-flash");
   } catch (error: any) {
     console.error(
       "An error occurred while generating song lyrics with GEMINI:",
@@ -748,7 +835,7 @@ async function pollSunoOrgStreamUrl(
           alignedWords,
         };
 
-        if (finalUrl.includes("tempfile.aiquickdraw")) {
+        if (finalUrl.includes("tempfile.aiquickdraw") && DOWNLOAD_AUDIO_URL) {
           setTimeout(() => {
             notifyFinalReady(taskId, finalUrl);
           }, 5000);
@@ -803,7 +890,7 @@ async function continueSunoOrgPolling(taskId: string, mood: string) {
 
       if (validSong) {
         const finalUrl = validSong.audioUrl || validSong.audio_url;
-        console.log("Final Suno Org MP3 Ready:", finalUrl);
+        console.log("Suno Org Final MP3 Ready:", finalUrl);
 
         // Emit event to app layer
         notifyFinalReady(taskId, finalUrl);

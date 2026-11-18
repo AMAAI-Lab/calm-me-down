@@ -1,3 +1,5 @@
+import { MAX_NEWS_HEADLINES } from "@/constants/appConstants";
+
 const OPENWEATHER_API_KEY = process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY;
 
 const NEWS_API_KEY = process.env.EXPO_PUBLIC_NEWS_API_KEY;
@@ -145,6 +147,22 @@ function isLikelyNonEnglish(text: string): boolean {
 
   const nonAsciiAlpha = (text.match(/[\u00C0-\u024F]/g) ?? []).length;
   return nonAsciiAlpha / alpha.length > 0.25;
+}
+
+// Headlines that can never help a song (sports results, shopping deals,
+// financial markets) or that could upset a participant in a mood study.
+const NEWS_BLOCKLIST: RegExp[] = [
+  /\b\d{1,3}\s?[-–]\s?\d{1,3}\b/, // scorelines such as 63-58
+  /\b(defeats?|beats?|scores?|playoffs?|league|tournament|championship|vs\.?)\b/i,
+  /[$€£]\s?\d|\b(deal|deals|coupon|discount|sale|% off|woot|promo|giveaway)\b/i,
+  /\b(stocks?|shares|investors?|markets?|earnings|ipo|crypto|bitcoin|nasdaq|dow)\b/i,
+  /\b(kill(ed|s)?|dead|dies|death|murder|shoot(ing)?|attack|war|crash|assault|abuse|suicide)\b/i,
+];
+
+export function filterHeadlines(headlines: string[] = []): string[] {
+  return headlines
+    .filter((h) => !!h && !NEWS_BLOCKLIST.some((re) => re.test(h)))
+    .slice(0, MAX_NEWS_HEADLINES);
 }
 
 export async function fetchUniqueNewsData(
