@@ -48,7 +48,7 @@ export interface PromptContext {
   previousStyles: string[]; // music style strings of earlier songs
 }
 
-export const APP_VERSION = 38;
+export const APP_VERSION = 41;
 export const DEBUG_MODE = false;
 export const LISTEN_BEFORE_GENERATE_MS = 2000;
 export const CONTINUOUS_PLAYBACK_MS = 5000;
@@ -14039,4 +14039,4 @@ export const MAX_NEWS_HEADLINES = 3;
 export const CLAUDE_LYRICS_MODEL: string = "claude-opus-4-6";
 // export const CLAUDE_LYRICS_MODEL: string = "claude-opus-5-5"
 
-export const SHOW_UPLOAD_HEALTH_BTN = true;
+export const SHOW_UPLOAD_HEALTH_BTN = false;
