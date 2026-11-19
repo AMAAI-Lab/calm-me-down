@@ -22,7 +22,7 @@ import {
 } from "./LocalUserService";
 
 // --- API KEYS & CONSTANTS ---
-const OPEN_AI_API_KEY = process.env.EXPO_PUBLIC_OPEN_AI_API_KEY;
+const OPEN_AI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
 const GROK_API_KEY = process.env.EXPO_PUBLIC_GROK_API_KEY;
 const CLAUDE_API_KEY = process.env.EXPO_PUBLIC_CLAUDE_API_KEY;
 const PPLX_API_KEY = process.env.EXPO_PUBLIC_PPLX_API_KEY;
@@ -197,6 +197,8 @@ async function generateWithPerplexity(
 
 async function generateWithClaude(
   prompt: string,
+  maxTokens = 512,
+  retries = 0,
 ): Promise<LyricsResult | null> {
   if (!CLAUDE_API_KEY) {
     Alert.alert(
@@ -206,61 +208,30 @@ async function generateWithClaude(
     return null;
   }
 
-  if (CLAUDE_LYRICS_MODEL === "claude-opus-5-5") {
-    return generateWithClaudeOpus5_5(prompt);
-  }
+  const lyricsModel =
+    CLAUDE_LYRICS_MODEL === "claude-opus-5-5"
+      ? "claude-opus-5-5"
+      : "claude-opus-4-6";
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": `${CLAUDE_API_KEY}`,
-        "anthropic-version": "2023-06-01",
+    const payload: any = {
+      // model: "claude-opus-4-6",
+      // model: "claude-opus-5-5",
+      model: lyricsModel,
+      max_tokens: maxTokens,
+      messages: [{ role: "user", content: prompt }],
+    };
 
-        // "anthropic-dangerous-direct-browser-access": "true",
-      },
-      body: JSON.stringify({
-        messages: [{ role: "user", content: prompt }],
-        // max_tokens: 1024,
-        max_tokens: 512,
-        // model: "claude-opus-4-6",
-        // model: "claude-opus-5-5",
-        model: CLAUDE_LYRICS_MODEL,
-      }),
-    });
+    if (lyricsModel === "claude-opus-5-5") {
+      payload.output_config = { effort: "low" };
 
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(
-        data.error?.message || "CLAUDE failed to generate lyrics.",
-      );
+      // 1st request
+      if (retries === 0) {
+        maxTokens = 1024;
+        payload.maxTokens = 1024;
+      }
     }
 
-    return extractLyrics(data?.content[0]?.text || "", CLAUDE_LYRICS_MODEL);
-  } catch (error: any) {
-    console.error(
-      "An error occurred while generating song lyrics with CLAUDE:",
-      error?.message,
-    );
-    return null;
-  }
-}
-
-async function generateWithClaudeOpus5_5(
-  prompt: string,
-  maxTokens = 1024,
-  isRetry = false,
-): Promise<LyricsResult | null> {
-  if (!CLAUDE_API_KEY) {
-    Alert.alert(
-      "API Key Missing",
-      "Please set the CLAUDE API key to generate lyrics.",
-    );
-    return null;
-  }
-
-  try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -270,44 +241,46 @@ async function generateWithClaudeOpus5_5(
 
         // "anthropic-dangerous-direct-browser-access": "true",
       },
-      body: JSON.stringify({
-        model: CLAUDE_LYRICS_MODEL,
-        max_tokens: maxTokens,
-        output_config: { effort: "low" },
-        messages: [{ role: "user", content: prompt }],
-      }),
+      body: JSON.stringify(payload),
     });
 
     const data = await response.json();
     if (!response.ok) {
       throw new Error(
-        data.error?.message || "CLAUDE failed to generate lyrics.",
+        `${lyricsModel} failed to generate lyrics: `,
+        data.error?.message || "(No message found)",
       );
     }
 
     // Output was cut off: retry once with a larger budget instead of parsing partial JSON
     if (data.stop_reason === "max_tokens") {
-      if (!isRetry) {
-        console.warn("Claude hit max_tokens, retrying with a higher limit");
-        return generateWithClaudeOpus5_5(prompt, maxTokens * 4, true);
+      if (retries < 2) {
+        console.warn(
+          `${lyricsModel} hit max_tokens, retrying with a higher limit`,
+        );
+        return generateWithClaude(prompt, maxTokens * 2, retries + 1);
       }
-      throw new Error("Claude response was truncated (max_tokens).");
+      throw new Error(
+        `${lyricsModel} response was truncated due to low Max_Tokens.`,
+      );
     }
 
     // Find the text block by type; content[0] may be a thinking block
-    const text = (data.content ?? [])
-      .filter((block: any) => block.type === "text")
-      .map((block: any) => block.text)
-      .join("");
+    const text =
+      (data.content ?? [])
+        .filter((block: any) => block.type === "text")
+        .map((block: any) => block.text)
+        .join("") || data?.content[0]?.text;
 
     if (!text) {
-      throw new Error("Claude returned no text content.");
+      console.log("=> Data content when no text generated = ", data.content);
+      throw new Error(`${lyricsModel} returned no text content!`);
     }
 
-    return extractLyrics(text, CLAUDE_LYRICS_MODEL);
+    return extractLyrics(text, lyricsModel);
   } catch (error: any) {
     console.error(
-      "An error occurred while generating song lyrics with CLAUDE:",
+      `"An error occurred while generating song lyrics with ${lyricsModel}:"`,
       error?.message,
     );
     return null;

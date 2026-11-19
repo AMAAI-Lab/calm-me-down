@@ -100,6 +100,7 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Platform,
   Pressable,
@@ -252,6 +253,7 @@ export default function ParticipantsScreen() {
   const [songJustFinished, setSongJustFinished] = useState(false);
   const [nextSongLoading, setNextSongLoading] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [healthDataUploading, setHealthDataUploading] = useState(false);
   const [songQueue, setSongQueue] = useState<GeneratedSong[]>([]);
   const [currentSongIndex, setCurrentSongIndex] = useState<number>(0);
   const [sliderValue, setSliderValue] = useState(0);
@@ -1424,17 +1426,30 @@ export default function ParticipantsScreen() {
   };
 
   const uploadSessionHealthData = async () => {
-    const recentHealthDataBlk = await fetchAppleHealthData(90);
+    setHealthDataUploading(true);
 
-    const sessionId = await getSessionId();
-    await updateMusicSession(
-      user?.email!,
-      sessionId,
-      {
-        healthData: recentHealthDataBlk,
-      },
-      true,
-    );
+    try {
+      const recentHealthDataBlk = await fetchAppleHealthData(90);
+
+      const sessionId = await getSessionId();
+      await updateMusicSession(
+        user?.email!,
+        sessionId,
+        {
+          healthData: recentHealthDataBlk,
+        },
+        true,
+      );
+
+      Alert.alert("Session health data saved successfully!");
+    } catch (err: any) {
+      console.error(
+        "Error while uploading session heath data to DB: ",
+        err?.message || err,
+      );
+    }
+
+    setHealthDataUploading(false);
   };
 
   // Fetch news and weather info
@@ -2372,8 +2387,23 @@ export default function ParticipantsScreen() {
       {/* Upload Health data Button */}
       {(allPlaylistsCompleted || SHOW_UPLOAD_HEALTH_BTN) && (
         <View style={[styles.section, { marginTop: 0 }]}>
-          <Pressable onPress={uploadSessionHealthData} style={styles.startBtn}>
-            <Text style={styles.startBtnText}>Upload session Health data</Text>
+          <Pressable
+            onPress={uploadSessionHealthData}
+            style={styles.startBtn}
+            disabled={healthDataUploading}
+          >
+            {healthDataUploading ? (
+              <ActivityIndicator color="#fff" size={30} />
+            ) : (
+              <Text
+                style={[
+                  styles.startBtnText,
+                  { maxWidth: "90%", textAlign: "center" },
+                ]}
+              >
+                Sync watch with Connect and save health data
+              </Text>
+            )}
           </Pressable>
         </View>
       )}

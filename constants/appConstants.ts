@@ -162,7 +162,7 @@ export const MAX_LOG_FILE_SIZE = 500_000; // 500KB
 export const HRV_APP_VERSION = false;
 export const HRV_DURATION_MINS = 1440; //24 hours
 
-export const LYRICS_PROVIDERS = ["CLAUDE", "GROK", "OPEN_AI", "GEMINI"];
+export const LYRICS_PROVIDERS = ["CLAUDE", "GEMINI","GROK", "OPEN_AI"];
 export type LyricsProviderType = (typeof LYRICS_PROVIDERS)[number];
 export const CURRENT_LYRICS_PROVIDER: "GEMINI" | "CLAUDE" | "GROK" | "OPEN_AI" =
   "CLAUDE";
