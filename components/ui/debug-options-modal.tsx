@@ -1,10 +1,15 @@
-import React, { useState } from "react";
-import { Modal, View, Text, Pressable, StyleSheet, Alert } from "react-native";
-import { FontAwesome5 } from "@expo/vector-icons";
-import CommonButton from "./common-button";
 import { useAuth } from "@/context/AuthContext";
-import { shareLogs, viewLogs } from "@/services/LoggerService";
+import {
+  shareLogs,
+  shareSessionLogs,
+  viewLogs,
+  viewSessionLogs,
+} from "@/services/LoggerService";
+import { FontAwesome5 } from "@expo/vector-icons";
 import { useNavigation } from "expo-router";
+import React, { useState } from "react";
+import { Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import CommonButton from "./common-button";
 
 interface DebugOptionsModalProps {
   clearStates?: () => void;
@@ -119,14 +124,14 @@ export default function DebugOptionsModal({
             <View style={[styles.row, { opacity: 0.8 }]}>
               <Text style={styles.rowLabel}>View logs</Text>
               <CommonButton
-                onPress={viewLogs}
+                onPress={isHomeScreen ? viewLogs : viewSessionLogs}
                 icon={<FontAwesome5 name="eye" size={22} color="#fff" />}
               />
               <Text style={[styles.rowLabel, { marginLeft: 15 }]}>
                 Share logs
               </Text>
               <CommonButton
-                onPress={shareLogs}
+                onPress={isHomeScreen ? shareLogs : shareSessionLogs}
                 icon={<FontAwesome5 name="share" size={22} color="#fff" />}
               />
             </View>

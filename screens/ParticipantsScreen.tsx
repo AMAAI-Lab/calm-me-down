@@ -59,6 +59,10 @@ import {
   saveTrajectoryId,
 } from "@/services/LocalUserService";
 import {
+  endSessionLogging,
+  startSessionLogging,
+} from "@/services/LoggerService";
+import {
   downloadAndSaveAudio,
   fetchJamendoTrack,
   fetchSavedPlaylistTrack,
@@ -986,9 +990,8 @@ export default function ParticipantsScreen() {
 
   const handleStart = async () => {
     setPlaylistReset(false);
-    if (loading) {
-      return;
-    }
+
+    if (loading) return;
     setLoading(true);
 
     try {
@@ -1014,9 +1017,14 @@ export default function ParticipantsScreen() {
         },
         true,
       );
+
       await saveSessionId(newSessionID);
 
+      // Start a fresh log file for each session.
+      await startSessionLogging(newSessionID);
+
       const firstPlaylist = PLAYLIST_DEFS[seq[0]];
+
       if (firstPlaylist.playlistType === "AI_Trajectory") {
         await generateLyricsAndSong();
       } else {
@@ -1025,10 +1033,10 @@ export default function ParticipantsScreen() {
 
       setPhase("running");
     } catch (err: any) {
-      console.error("Error while starting session: ", err?.message);
+      console.error("Error while starting session:", err?.message);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const startNextPlaylist = async () => {
@@ -1350,6 +1358,10 @@ export default function ParticipantsScreen() {
     setRatingUnlocked(false);
     setShowRatingAlert(false);
     await updateTrackInDB({ liked: rating === "up" }, idx);
+
+    if (allPlaylistsCompleted) {
+      endSessionLogging();
+    }
   };
 
   const handleNavigate = () => {
